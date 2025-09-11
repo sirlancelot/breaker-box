@@ -6,6 +6,6 @@ export type AnyFn = (...args: any[]) => any
  * have been handled. If a new value is added to the type, TypeScript will
  * throw an error and the editor will underline the `value`.
  */
-export const assertNever = (value: never, message = "Unexpected value") =>
-	/* v8 ignore next */
-	new TypeError(`${message}: ${value}`)
+/* v8 ignore next 2 */
+export const assertNever = (val: never, msg = "Unexpected value") =>
+	new TypeError(`${msg}: ${val}`)

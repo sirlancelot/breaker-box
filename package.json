@@ -20,7 +20,7 @@
 		"dist"
 	],
 	"scripts": {
-		"build": "pkgroll --clean-dist --src lib --target=node18 --sourcemap",
+		"build": "pkgroll --clean-dist --src lib --target=node18 --sourcemap --env.NODE_ENV=production",
 		"dev": "vitest",
 		"prepublishOnly": "npm run build",
 		"test": "vitest --run"

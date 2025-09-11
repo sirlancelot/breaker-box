@@ -152,9 +152,18 @@ export function createCircuitBreaker<Args extends unknown[], Ret>(
 		}
 
 		// Shutting down...
-		else if (state === "disposed")
+		else if (state === "disposed") {
 			throw new Error("Circuit breaker has been disposed")
-		else throw assertNever(state)
+			/* v8 ignore next */
+		}
+
+		// exhaustive check
+		/* v8 ignore next 5 */
+		else {
+			throw process.env.NODE_ENV !== "production"
+				? assertNever(state)
+				: undefined
+		}
 	}
 
 	protectedFunction.dispose = () => {
