@@ -1,6 +1,6 @@
-import { type AnyFn, assertNever } from "./util.js"
+import { type AnyFn, assertNever, nextTick } from "./util.js"
 
-export type CircuitState = "closed" | "disposed" | "halfOpen" | "open"
+export type CircuitState = "closed" | "halfOpen" | "open"
 
 export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	/**
@@ -68,98 +68,104 @@ export function createCircuitBreaker<
 	const {
 		errorIsFailure = () => true,
 		failureThreshold = 1,
-		fallback = () => Promise.reject(failureCause),
 		onClose,
 		onOpen,
 		resetAfter = 30_000,
 	} = options
+	let fallback = options.fallback || (() => Promise.reject(failureCause))
 	let halfOpenPending: Promise<unknown> | undefined
 	let state: CircuitState = "closed"
-	let failureCause: unknown | undefined = undefined
+	let failureCause: unknown | undefined
 	let failureCount = 0
-	let resetTimer: NodeJS.Timeout | undefined = undefined
+	let resetTimer: NodeJS.Timeout | undefined
+
+	function clearFailure() {
+		failureCause = undefined
+		failureCount = 0
+	}
 
 	/**
 	 * Break the circuit and wait for a reset
 	 */
 	function openCircuit(cause: unknown) {
+		failureCause = cause
 		state = "open"
-		onOpen?.(cause)
 		clearTimeout(resetTimer)
 		resetTimer = setTimeout(() => (state = "halfOpen"), resetAfter)
-	}
-
-	/**
-	 * Reset the circuit and resume normal operation
-	 */
-	function closeCircuit() {
-		state = "closed"
-		failureCause = undefined
-		failureCount = 0
-		clearTimeout(resetTimer)
+		onOpen?.(cause)
 	}
 
 	/**
 	 * Wrap calls to `main` with circuit breaker logic
 	 */
-	async function protectedFunction(...args: Args): Promise<Ret> {
+	function protectedFunction(...args: Args): Promise<Ret> {
 		// Normal operation when circuit is closed. If an error occurs, keep track
 		// of the failure count and open the circuit if it exceeds the threshold.
 		if (state === "closed") {
-			return main(...args).catch((cause) => {
-				if (state === "disposed") throw cause
-				failureCause = cause
-				failureCount += errorIsFailure(cause) ? 1 : 0
-				if (failureCount >= failureThreshold) openCircuit(cause)
-				return protectedFunction(...args)
-			})
+			const thisFallback = fallback
+			return main(...args).then(
+				(result) => {
+					// Reset accumulated failures if circuit is still closed
+					if (state === "closed") clearFailure()
+					return result
+				},
+				(cause: unknown) => {
+					// Was the circuit breaker disposed while the call was in flight?
+					if (thisFallback !== fallback) throw cause
+					failureCount += errorIsFailure(cause) ? 1 : 0
+					if (failureCount === failureThreshold) openCircuit(cause)
+					return nextTick(() => protectedFunction(...args))
+				}
+			)
 		}
 
-		// Use the fallback while the circuit is open
+		// Use the fallback while the circuit is open, or if a half-open trial
+		// attempt was already made.
 		else if (state === "open" || halfOpenPending) {
 			return fallback(...args)
 		}
 
-		// While the circuit is half-open, try the main function once. If it
-		// succeeds, close the circuit and resume normal operation. If it fails,
-		// re-open the circuit and run the fallback instead.
+		// If the circuit is half-open, make one attempt. If it succeeds, close
+		// the circuit and resume normal operation. If it fails, re-open the
+		// circuit and run the fallback instead.
 		else if (state === "halfOpen") {
+			const thisFallback = fallback
 			return (halfOpenPending = main(...args))
 				.finally(() => (halfOpenPending = undefined))
 				.then(
 					(result) => {
-						if (state !== "disposed") {
-							closeCircuit()
-							onClose?.()
-						}
+						// Was the circuit breaker disposed while the call was
+						// in flight?
+						if (thisFallback !== fallback) return result
+						// Close the circuit and resume normal operation
+						state = "closed"
+						clearFailure()
+						clearTimeout(resetTimer)
+						onClose?.()
 						return result
 					},
-					(cause) => {
-						if (state === "disposed") throw cause
+					(cause: unknown) => {
+						// Was the circuit breaker disposed while the call was
+						// in flight?
+						if (thisFallback !== fallback) throw cause
 						openCircuit(cause)
-						return fallback(...args)
+						return nextTick(() => protectedFunction(...args))
 					}
 				)
-		}
-
-		// Shutting down...
-		else if (state === "disposed") {
-			throw new Error("Circuit breaker has been disposed")
 			/* v8 ignore next */
 		}
 
 		// exhaustive check
-		/* v8 ignore next 5 */
-		else {
-			throw process.env.NODE_ENV !== "production"
-				? assertNever(state)
-				: undefined
-		}
+		/* v8 ignore next */
+		return assertNever(state)
 	}
 
 	protectedFunction.dispose = () => {
-		closeCircuit()
-		state = "disposed"
+		clearFailure()
+		clearTimeout(resetTimer)
+		fallback = () =>
+			Promise.reject(new ReferenceError("ERR_CIRCUIT_BREAKER_DISPOSED"))
+		state = "open"
 	}
 
 	protectedFunction.getLatestError = () => failureCause

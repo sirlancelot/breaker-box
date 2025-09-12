@@ -6,12 +6,18 @@ export type AnyFn = (...args: any[]) => any
  * have been handled. If a new value is added to the type, TypeScript will
  * throw an error and the editor will underline the `value`.
  */
-/* v8 ignore next 2 */
-export const assertNever = (val: never, msg = "Unexpected value") =>
-	new TypeError(`${msg}: ${val}`)
+/* v8 ignore next 3 */
+export const assertNever = (val: never, msg = "Unexpected value") => {
+	throw new TypeError(`${msg}: ${val}`)
+}
 
 /**
  * Returns a promise that resolves after the specified number of milliseconds.
  */
-export const delayMs = (ms: number) =>
+export const delayMs = (ms: number): Promise<void> =>
 	new Promise((next) => setTimeout(next, ms))
+
+const resolvedPromise = Promise.resolve()
+
+export const nextTick = <T>(fn: () => T | PromiseLike<T>): Promise<T> =>
+	resolvedPromise.then(fn)

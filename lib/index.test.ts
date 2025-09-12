@@ -95,7 +95,7 @@ it("allows multiple failures before opening", async ({ expect }) => {
 	when(main, { times: failureThreshold + 1 })
 		.calledWith()
 		.thenReject(new Error("Use fallback"))
-	
+
 	when(fallback).calledWith().thenResolve(fallbackOk)
 	const protectedFn = createCircuitBreaker(main, {
 		failureThreshold,
@@ -143,18 +143,20 @@ it("emits events", async ({ expect }) => {
 	expect(result).toBe(ok)
 })
 
-it("frees memory", async ({ expect }) => {
-	let protectedFn = createCircuitBreaker(main)
+it("handles shutdown", async ({ expect }) => {
+	const protectedFn = createCircuitBreaker(main)
 	protectedFn.dispose()
-	expect(protectedFn.getState()).toBe("disposed")
+	expect(protectedFn.getState()).toBe("open")
 
-	await expect(protectedFn()).rejects.toThrow("disposed")
+	await expect(protectedFn()).rejects.toThrow("ERR_CIRCUIT_BREAKER_DISPOSED")
+})
 
+it("handles inflight requests after shutdown", async ({ expect }) => {
 	// Inflight calls should resolve or reject as normal
-	when(main, { times: 1 })
+	when(main)
 		.calledWith("good")
 		.thenReturn(delayMs(1).then(() => ok))
-	protectedFn = createCircuitBreaker(main)
+	let protectedFn = createCircuitBreaker(main)
 
 	let result = protectedFn("good")
 	protectedFn.dispose()
@@ -163,10 +165,47 @@ it("frees memory", async ({ expect }) => {
 	await expect(result).resolves.toBe(ok)
 
 	// Reject
-	when(main, { times: 1 })
+	when(main)
 		.calledWith("bad")
 		.thenReturn(delayMs(1).then(() => Promise.reject(errorOk)))
 	protectedFn = createCircuitBreaker(main)
+
+	result = protectedFn("bad")
+	protectedFn.dispose()
+
+	vi.advanceTimersByTime(1)
+	await expect(result).rejects.toThrow(errorOk)
+})
+
+it("handles half-open requests after shutdown", async ({ expect }) => {
+	// The half-open call should resolve or reject as normal
+	when(main).calledWith("initial").thenReject(errorOk)
+	let protectedFn = createCircuitBreaker(main)
+
+	await expect(protectedFn("initial")).rejects.toThrow(errorOk)
+	vi.advanceTimersByTime(30_000)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	when(main)
+		.calledWith("good")
+		.thenReturn(delayMs(1).then(() => ok))
+
+	let result = protectedFn("good")
+	protectedFn.dispose()
+
+	vi.advanceTimersByTime(1)
+	await expect(result).resolves.toBe(ok)
+
+	// half-open reject
+	protectedFn = createCircuitBreaker(main)
+
+	await expect(protectedFn("initial")).rejects.toThrow(errorOk)
+	vi.advanceTimersByTime(30_000)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	when(main)
+		.calledWith("bad")
+		.thenReturn(delayMs(1).then(() => Promise.reject(errorOk)))
 
 	result = protectedFn("bad")
 	protectedFn.dispose()
