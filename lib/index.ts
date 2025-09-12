@@ -190,3 +190,26 @@ export function createCircuitBreaker<
 
 	return protectedFunction
 }
+
+/**
+ * Wrap a function with a timeout. If execution of `main` exceeds `timeoutMs`,
+ * then the call is rejected with `new Error(timeoutMessage)`.
+ */
+export function withTimeout<Ret, Args extends unknown[]>(
+	main: MainFn<Ret, Args>,
+	timeoutMs: number,
+	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT"
+): MainFn<Ret, Args> {
+	const error = new Error(timeoutMessage)
+
+	return function withTimeoutFunction(...args) {
+		let timer: NodeJS.Timeout | undefined
+
+		return Promise.race([
+			main(...args).finally(() => clearTimeout(timer)),
+			new Promise<never>((_, reject) => {
+				timer = setTimeout(reject, timeoutMs, error)
+			}),
+		])
+	}
+}
