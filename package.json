@@ -2,7 +2,10 @@
 	"name": "breaker-box",
 	"version": "3.0.0",
 	"description": "A zero-dependency circuit breaker implementation for Node.js",
-	"repository": "github:sirlancelot/breaker-box",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/sirlancelot/breaker-box.git"
+	},
 	"main": "./dist/index.cjs",
 	"module": "./dist/index.mjs",
 	"types": "./dist/index.d.cts",
