@@ -27,14 +27,20 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	 */
 	fallback?: Fallback
 
-	/** Called when the circuit breaker is closed */
+	/**
+	 * Provide a function to be called when the circuit breaker is closed.
+	 */
 	onClose?: () => void
 
-	/** Called when the circuit breaker is opened */
+	/**
+	 * Provide a function to be called when the circuit breaker is opened. It
+	 * receives the error as its only argument.
+	 */
 	onOpen?: (cause: unknown) => void
 
 	/**
-	 * The amount of time to wait before allowing a half-open state.
+	 * The amount of time in milliseconds to wait before transitioning to a
+	 * half-open state.
 	 *
 	 * @default 30_000 // 30 seconds
 	 */
@@ -47,8 +53,13 @@ export interface CircuitBreakerProtectedFn<
 > {
 	(...args: Args): Promise<Ret>
 
-	/** Free memory and stop timers */
-	dispose(): void
+	/**
+	 * Free memory and stop timers. All future calls will be rejected with the
+	 * provided message.
+	 *
+	 * @default "ERR_CIRCUIT_BREAKER_DISPOSED"
+	 */
+	dispose(disposeMessage?: string): void
 
 	/** Get the last error which triggered the circuit breaker */
 	getLatestError(): unknown | undefined
@@ -57,12 +68,16 @@ export interface CircuitBreakerProtectedFn<
 	getState(): CircuitState
 }
 
+export type MainFn<Ret, Args extends unknown[]> = (
+	...args: Args
+) => Promise<Ret>
+
 export function createCircuitBreaker<
 	Ret,
 	Args extends unknown[],
-	Fallback extends AnyFn = (...args: Args) => Promise<Ret>
+	Fallback extends AnyFn = MainFn<Ret, Args>
 >(
-	main: (...args: Args) => Promise<Ret>,
+	main: MainFn<Ret, Args>,
 	options: CircuitBreakerOptions<Fallback> = {}
 ): CircuitBreakerProtectedFn<Ret, Args> {
 	const {
@@ -160,11 +175,12 @@ export function createCircuitBreaker<
 		return assertNever(state)
 	}
 
-	protectedFunction.dispose = () => {
+	protectedFunction.dispose = (
+		disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED"
+	) => {
 		clearFailure()
 		clearTimeout(resetTimer)
-		fallback = () =>
-			Promise.reject(new ReferenceError("ERR_CIRCUIT_BREAKER_DISPOSED"))
+		fallback = () => Promise.reject(new ReferenceError(disposeMessage))
 		state = "open"
 	}
 
