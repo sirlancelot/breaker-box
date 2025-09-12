@@ -9,3 +9,9 @@ export type AnyFn = (...args: any[]) => any
 /* v8 ignore next 2 */
 export const assertNever = (val: never, msg = "Unexpected value") =>
 	new TypeError(`${msg}: ${val}`)
+
+/**
+ * Returns a promise that resolves after the specified number of milliseconds.
+ */
+export const delayMs = (ms: number) =>
+	new Promise((next) => setTimeout(next, ms))

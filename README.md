@@ -27,9 +27,10 @@ async function unreliableApiCall(data: string) {
 }
 
 const protectedApiCall = createCircuitBreaker(unreliableApiCall, {
-	failureThreshold: 1, // Open circuit after first failure
-	resetAfter: 30_000, // Try again after 30 seconds
-	errorIsFailure: (error) => true,
+	errorIsFailure: () => true, // Any error is considered a failure
+	failureThreshold: 1,        // Open circuit after first failure
+	fallback: undefined,        // No fallback, errors are propagated
+	resetAfter: 30_000,         // Try again after 30 seconds
 })
 
 try {
@@ -43,22 +44,13 @@ try {
 ### Event Monitoring
 
 ```typescript
-const protectedFunction = createCircuitBreaker(unreliableApiCall)
-
-protectedFunction.on("open", (cause) => {
-	console.log("Circuit opened due to:", cause.message)
-})
-
-protectedFunction.on("close", () => {
-	console.log("Circuit closed - normal operation resumed")
-})
-
-protectedFunction.on("reject", (error) => {
-	console.log("Function call rejected:", error.message)
-})
-
-protectedFunction.on("resolve", () => {
-	console.log("Function call succeeded")
+const protectedFunction = createCircuitBreaker(unreliableApiCall, {
+	onClose: () => {
+		console.log("Circuit closed - normal operation resumed")
+	},
+	onOpen: (cause) => {
+		console.log("Circuit opened due to:", cause.message)
+	},
 })
 
 // Check current state
@@ -83,26 +75,20 @@ Creates a circuit breaker around the provided async function.
 
 - `fn`: The async function to protect
 - `options`: Configuration object (optional)
-    - `failureThreshold`: Number of failures before opening circuit (default: 1)
-    - `resetAfter`: Milliseconds to wait before trying again (default: 30000)
     - `errorIsFailure`: Function to determine if an error counts as failure (default: all errors)
-    - `fallback`: Function to call when circuit is open (default: throws CircuitOpenError)
+    - `failureThreshold`: Number of failures before opening circuit (default: 1)
+    - `fallback`: Function to call when circuit is open (default: undefined)
+	- `onClose`: Function to call when circuit is closed (default: undefined)
+	- `onOpen`: Function to call when circuit is opened (default: undefined)
+    - `resetAfter`: Milliseconds to wait before trying again (default: 30000)
 
 #### Returns
 
 A function with the same signature as `fn` and additional methods:
 
-- `.getState()`: Returns current circuit state
-- `.on(event, listener)`: Add event listener
-- `.off(event, listener)`: Remove event listener
 - `.dispose()`: Clean up resources
-
-#### Events
-
-- `open`: Circuit opened due to failures
-- `close`: Circuit closed and resumed normal operation
-- `reject`: Function call was rejected
-- `resolve`: Function call succeeded
+- `.getLatestError()`: Returns the error which triggered the circuit breaker
+- `.getState()`: Returns current circuit state
 
 ### Development
 
