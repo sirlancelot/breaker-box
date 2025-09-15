@@ -27,7 +27,7 @@
 		"build": "pkgroll --clean-dist --src lib --target=node18 --sourcemap --env.NODE_ENV=production",
 		"dev": "vitest",
 		"format": "NODE_OPTIONS='--experimental-strip-types' prettier . --write",
-		"prepublishOnly": "npm run build",
+		"prepublishOnly": "npm run test && npm run build",
 		"reinstall": "rm -rf node_modules package-lock.json && npm install",
 		"test": "vitest --run"
 	},
@@ -40,7 +40,7 @@
 	"author": "Matthew Pietz <sirlancelot@gmail.com>",
 	"license": "ISC",
 	"devDependencies": {
-		"@types/node": "24.3.1",
+		"@types/node": "24.5.0",
 		"@vitest/coverage-v8": "3.2.4",
 		"pkgroll": "2.15.4",
 		"prettier": "3.6.2",
