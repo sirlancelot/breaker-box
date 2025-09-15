@@ -17,7 +17,15 @@ export const assertNever = (val: never, msg = "Unexpected value") => {
 export const delayMs = (ms: number): Promise<void> =>
 	new Promise((next) => setTimeout(next, ms))
 
-const resolvedPromise = Promise.resolve()
-
-export const nextTick = <T>(fn: () => T | PromiseLike<T>): Promise<T> =>
-	resolvedPromise.then(fn)
+export const rejectOnAbort = <T>(signal: AbortSignal, pending: T) => {
+	let reject: (reason?: unknown) => void
+	return Promise.race([
+		Promise.resolve(pending).finally(() =>
+			signal.removeEventListener("abort", reject),
+		),
+		new Promise<never>((_, reject_) => {
+			reject = reject_
+			signal.addEventListener("abort", () => reject(signal.reason))
+		}),
+	])
+}

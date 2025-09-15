@@ -1,102 +1,64 @@
-import { type AnyFn, assertNever, nextTick } from "./util.js"
+import type {
+	HistoryEntry,
+	HistoryMap,
+	CircuitBreakerOptions,
+	CircuitBreakerProtectedFn,
+	CircuitState,
+	MainFn,
+} from "./types.js"
+import { assertNever, rejectOnAbort, type AnyFn } from "./util.js"
 
-export type CircuitState = "closed" | "halfOpen" | "open"
-
-export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
-	/**
-	 * Whether an error should be considered a failure that could trigger
-	 * the circuit breaker. Use this to prevent certain errors from
-	 * incrementing the failure count.
-	 *
-	 * @default () => true // Every error is considered a failure
-	 */
-	errorIsFailure?: (error: unknown) => boolean
-
-	/**
-	 * The number of failures before the circuit breaker opens.
-	 *
-	 * @default 1 // The first error opens the circuit
-	 */
-	failureThreshold?: number
-
-	/**
-	 * If provided, then all rejected calls to `main` will be forwarded to
-	 * this function instead.
-	 *
-	 * @default undefined // No fallback, errors are propagated
-	 */
-	fallback?: Fallback
-
-	/**
-	 * Provide a function to be called when the circuit breaker is closed.
-	 */
-	onClose?: () => void
-
-	/**
-	 * Provide a function to be called when the circuit breaker is opened. It
-	 * receives the error as its only argument.
-	 */
-	onOpen?: (cause: unknown) => void
-
-	/**
-	 * The amount of time in milliseconds to wait before transitioning to a
-	 * half-open state.
-	 *
-	 * @default 30_000 // 30 seconds
-	 */
-	resetAfter?: number
-}
-
-export interface CircuitBreakerProtectedFn<
-	Ret = unknown,
-	Args extends unknown[] = never[]
-> {
-	(...args: Args): Promise<Ret>
-
-	/**
-	 * Free memory and stop timers. All future calls will be rejected with the
-	 * provided message.
-	 *
-	 * @default "ERR_CIRCUIT_BREAKER_DISPOSED"
-	 */
-	dispose(disposeMessage?: string): void
-
-	/** Get the last error which triggered the circuit breaker */
-	getLatestError(): unknown | undefined
-
-	/** Get the current state of the circuit breaker */
-	getState(): CircuitState
-}
-
-export type MainFn<Ret, Args extends unknown[]> = (
-	...args: Args
-) => Promise<Ret>
+export * from "./helpers.js"
+export { delayMs } from "./util.js"
 
 export function createCircuitBreaker<
 	Ret,
 	Args extends unknown[],
-	Fallback extends AnyFn = MainFn<Ret, Args>
+	Fallback extends AnyFn = MainFn<Ret, Args>,
 >(
 	main: MainFn<Ret, Args>,
-	options: CircuitBreakerOptions<Fallback> = {}
+	options: CircuitBreakerOptions<Fallback> = {},
 ): CircuitBreakerProtectedFn<Ret, Args> {
 	const {
-		errorIsFailure = () => true,
-		failureThreshold = 1,
+		errorIsFailure = () => false,
+		errorThreshold = 0,
+		errorWindow = 10_000,
+		minimumCandidates = 6,
 		onClose,
 		onOpen,
 		resetAfter = 30_000,
+		retryDelay = () => {},
 	} = options
+	const controller = new AbortController()
+	const history: HistoryMap = new Map()
+	const signal = controller.signal
+	let failureCause: unknown
 	let fallback = options.fallback || (() => Promise.reject(failureCause))
 	let halfOpenPending: Promise<unknown> | undefined
+	let resetTimer: NodeJS.Timeout
 	let state: CircuitState = "closed"
-	let failureCause: unknown | undefined
-	let failureCount = 0
-	let resetTimer: NodeJS.Timeout | undefined
 
 	function clearFailure() {
 		failureCause = undefined
-		failureCount = 0
+	}
+
+	function closeCircuit() {
+		state = "closed"
+		clearFailure()
+		clearTimeout(resetTimer)
+		onClose?.()
+	}
+
+	function failureRate() {
+		let failures = 0
+		let total = 0
+		for (const { status } of history.values()) {
+			if (status === "rejected") failures++
+			if (status !== "pending") total++
+		}
+		// Don't calculate anything until we have enough data
+		if (!total || total < minimumCandidates) return 0
+		return failures / total
 	}
 
 	/**
@@ -110,27 +72,53 @@ export function createCircuitBreaker<
 		onOpen?.(cause)
 	}
 
+	function createHistoryItem<T>(pending: Promise<T>) {
+		const entry: HistoryEntry = { status: "pending", timer: undefined }
+		const teardown = () => {
+			clearTimeout(entry.timer)
+			history.delete(pending)
+			signal.removeEventListener("abort", teardown)
+		}
+		signal.addEventListener("abort", teardown)
+		const settle = (value: "resolved" | "rejected") => {
+			if (signal.aborted) return
+			entry.status = value
+			// Remove the entry from history when it falls outside of the error window
+			entry.timer = setTimeout(teardown, errorWindow)
+		}
+		history.set(pending, entry)
+		return { pending, settle, teardown }
+	}
+
 	/**
 	 * Wrap calls to `main` with circuit breaker logic
 	 */
-	function protectedFunction(...args: Args): Promise<Ret> {
+	function execute(attempt: number, args: Args): Promise<Ret> {
 		// Normal operation when circuit is closed. If an error occurs, keep track
 		// of the failure count and open the circuit if it exceeds the threshold.
 		if (state === "closed") {
-			const thisFallback = fallback
-			return main(...args).then(
+			const { pending, settle, teardown } = createHistoryItem(main(...args))
+			return pending.then(
 				(result) => {
-					// Reset accumulated failures if circuit is still closed
-					if (state === "closed") clearFailure()
+					settle("resolved")
 					return result
 				},
-				(cause: unknown) => {
-					// Was the circuit breaker disposed while the call was in flight?
-					if (thisFallback !== fallback) throw cause
-					failureCount += errorIsFailure(cause) ? 1 : 0
-					if (failureCount === failureThreshold) openCircuit(cause)
-					return nextTick(() => protectedFunction(...args))
-				}
+				async (cause: unknown) => {
+					// Was the circuit disposed, or was this a non-retryable error?
+					if (signal.aborted || errorIsFailure(cause)) {
+						teardown()
+						throw cause
+					}
+
+					// Should this failure open the circuit?
+					settle("rejected")
+					if (failureRate() > errorThreshold) openCircuit(cause)
+
+					// Retry the call after a delay.
+					const next = attempt + 1
+					await rejectOnAbort(signal, retryDelay(next, signal))
+					return execute(next, args)
+				},
 			)
 		}
 
@@ -144,28 +132,26 @@ export function createCircuitBreaker<
 		// the circuit and resume normal operation. If it fails, re-open the
 		// circuit and run the fallback instead.
 		else if (state === "halfOpen") {
-			const thisFallback = fallback
 			return (halfOpenPending = main(...args))
 				.finally(() => (halfOpenPending = undefined))
 				.then(
 					(result) => {
-						// Was the circuit breaker disposed while the call was
-						// in flight?
-						if (thisFallback !== fallback) return result
-						// Close the circuit and resume normal operation
-						state = "closed"
-						clearFailure()
-						clearTimeout(resetTimer)
-						onClose?.()
+						if (signal.aborted) return result // disposed
+						closeCircuit()
 						return result
 					},
-					(cause: unknown) => {
-						// Was the circuit breaker disposed while the call was
-						// in flight?
-						if (thisFallback !== fallback) throw cause
+					async (cause: unknown) => {
+						// Was the circuit disposed, or was this a non-retryable error?
+						if (signal.aborted || errorIsFailure(cause)) throw cause
+
+						// Open the circuit and try again later
 						openCircuit(cause)
-						return nextTick(() => protectedFunction(...args))
-					}
+
+						// Retry the call after a delay.
+						const next = attempt + 1
+						await rejectOnAbort(signal, retryDelay(next, signal))
+						return execute(next, args)
+					},
 				)
 			/* v8 ignore next */
 		}
@@ -175,41 +161,18 @@ export function createCircuitBreaker<
 		return assertNever(state)
 	}
 
-	protectedFunction.dispose = (
-		disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED"
-	) => {
-		clearFailure()
-		clearTimeout(resetTimer)
-		fallback = () => Promise.reject(new ReferenceError(disposeMessage))
-		state = "open"
-	}
-
-	protectedFunction.getLatestError = () => failureCause
-
-	protectedFunction.getState = () => state
-
-	return protectedFunction
-}
-
-/**
- * Wrap a function with a timeout. If execution of `main` exceeds `timeoutMs`,
- * then the call is rejected with `new Error(timeoutMessage)`.
- */
-export function withTimeout<Ret, Args extends unknown[]>(
-	main: MainFn<Ret, Args>,
-	timeoutMs: number,
-	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT"
-): MainFn<Ret, Args> {
-	const error = new Error(timeoutMessage)
-
-	return function withTimeoutFunction(...args) {
-		let timer: NodeJS.Timeout | undefined
-
-		return Promise.race([
-			main(...args).finally(() => clearTimeout(timer)),
-			new Promise<never>((_, reject) => {
-				timer = setTimeout(reject, timeoutMs, error)
-			}),
-		])
-	}
+	return Object.assign((...args: Args) => execute(1, args), {
+		dispose: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+			const reason = new ReferenceError(disposeMessage)
+			clearFailure()
+			clearTimeout(resetTimer)
+			history.forEach((entry) => clearTimeout(entry.timer))
+			history.clear()
+			fallback = () => Promise.reject(reason)
+			state = "open"
+			controller.abort(reason)
+		},
+		getLatestError: () => failureCause,
+		getState: () => state,
+	})
 }
