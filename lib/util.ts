@@ -17,15 +17,21 @@ export const assertNever = (val: never, msg = "Unexpected value") => {
 export const delayMs = (ms: number): Promise<void> =>
 	new Promise((next) => setTimeout(next, ms))
 
-export const rejectOnAbort = <T>(signal: AbortSignal, pending: T) => {
-	let reject: (reason?: unknown) => void
+/**
+ * Rejects the given promise when the abort signal is triggered.
+ */
+export const rejectOnAbort = <T extends Promise<any> | undefined>(
+	signal: AbortSignal,
+	pending: T,
+): Promise<Awaited<T>> => {
+	let teardown: () => void
 	return Promise.race([
 		Promise.resolve(pending).finally(() =>
-			signal.removeEventListener("abort", reject),
+			signal.removeEventListener("abort", teardown),
 		),
-		new Promise<never>((_, reject_) => {
-			reject = reject_
-			signal.addEventListener("abort", () => reject(signal.reason))
+		new Promise<never>((_, reject) => {
+			teardown = () => reject(signal.reason)
+			signal.addEventListener("abort", teardown)
 		}),
 	])
 }
