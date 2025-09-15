@@ -1,0 +1,30 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`handles 'errorIsFailure' error 1`] = `[TypeError: "errorIsFailure" must be a function (received number)]`;
+
+exports[`handles 'errorThreshold' error 1`] = `[TypeError: "errorThreshold" must be a number between 0 and 1 (received -1)]`;
+
+exports[`handles 'errorWindow' error 1`] = `[TypeError: "errorWindow" must be milliseconds greater than 0 (received -1)]`;
+
+exports[`handles 'minimumCandidates' error 1`] = `[TypeError: "minimumCandidates" must be a number greater than 1 (received 0)]`;
+
+exports[`handles 'onClose' error 1`] = `[TypeError: "onClose" must be a function (received number)]`;
+
+exports[`handles 'onOpen' error 1`] = `[TypeError: "onOpen" must be a function (received number)]`;
+
+exports[`handles 'resetAfter' error 1`] = `[TypeError: "resetAfter" must be milliseconds greater than 0 (received -1)]`;
+
+exports[`handles 'retryDelay' error 1`] = `[TypeError: "retryDelay" must be a function (received number)]`;
+
+exports[`sets defaults 1`] = `
+{
+  "errorIsFailure": () => false,
+  "errorThreshold": 0,
+  "errorWindow": 10000,
+  "minimumCandidates": 6,
+  "onClose": undefined,
+  "onOpen": undefined,
+  "resetAfter": 30000,
+  "retryDelay": () => void 0,
+}
+`;

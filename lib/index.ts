@@ -1,3 +1,4 @@
+import { parseOptions } from "./options.js"
 import type {
 	HistoryEntry,
 	HistoryMap,
@@ -20,15 +21,15 @@ export function createCircuitBreaker<
 	options: CircuitBreakerOptions<Fallback> = {},
 ): CircuitBreakerProtectedFn<Ret, Args> {
 	const {
-		errorIsFailure = () => false,
-		errorThreshold = 0,
-		errorWindow = 10_000,
-		minimumCandidates = 6,
+		errorIsFailure,
+		errorThreshold,
+		errorWindow,
+		minimumCandidates,
 		onClose,
 		onOpen,
-		resetAfter = 30_000,
-		retryDelay = () => {},
-	} = options
+		resetAfter,
+		retryDelay,
+	} = parseOptions(options)
 	const controller = new AbortController()
 	const history: HistoryMap = new Map()
 	const signal = controller.signal
