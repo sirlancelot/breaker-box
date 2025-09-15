@@ -1,6 +1,13 @@
 export type AnyFn = (...args: any[]) => any
 
 /**
+ * Asserts that the given value is truthy. If not, throws a `TypeError`.
+ */
+export function assert(value: unknown, message?: string): asserts value {
+	if (!value) throw new TypeError(message)
+}
+
+/**
  * `[TypeScript]` For exhaustive checks in switch statements or if/else. Add
  * this check to `default` case or final `else` to ensure all possible values
  * have been handled. If a new value is added to the type, TypeScript will
@@ -20,7 +27,7 @@ export const delayMs = (ms: number): Promise<void> =>
 /**
  * Rejects the given promise when the abort signal is triggered.
  */
-export const rejectOnAbort = <T extends Promise<any> | undefined>(
+export const rejectOnAbort = <T extends Promise<unknown> | undefined>(
 	signal: AbortSignal,
 	pending: T,
 ): Promise<Awaited<T>> => {

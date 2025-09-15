@@ -1,9 +1,5 @@
 import type { CircuitBreakerOptions } from "./types.js"
-import type { AnyFn } from "./util.js"
-
-function assert(value: unknown, message?: string): asserts value {
-	if (!value) throw new TypeError(message)
-}
+import { assert, type AnyFn } from "./util.js"
 
 export function parseOptions<Fallback extends AnyFn>(
 	options: CircuitBreakerOptions<Fallback>,
@@ -28,43 +24,41 @@ export function parseOptions<Fallback extends AnyFn>(
 	// errorThreshold
 	assert(
 		errorThreshold >= 0 && errorThreshold <= 1,
-		`"errorThreshold" must be a number between 0 and 1 (received ${errorThreshold})`,
+		`"errorThreshold" must be between 0 and 1 (received ${errorThreshold})`,
 	)
 
 	// errorWindow
 	assert(
-		errorWindow > 0,
-		`"errorWindow" must be milliseconds greater than 0 (received ${errorWindow})`,
+		errorWindow >= 1_000,
+		`"errorWindow" must be milliseconds of at least 1 second (received ${errorWindow})`,
 	)
 
 	// minimumCandidates
 	assert(
-		minimumCandidates > 1,
-		`"minimumCandidates" must be a number greater than 1 (received ${minimumCandidates})`,
+		minimumCandidates >= 1,
+		`"minimumCandidates" must be greater than 0 (received ${minimumCandidates})`,
 	)
 
 	// (optional) onClose
-	if (onClose)
-		assert(
-			typeof onClose === "function",
-			`"onClose" must be a function (received ${typeof onClose})`,
-		)
+	assert(
+		!onClose || typeof onClose === "function",
+		`"onClose" must be a function (received ${typeof onClose})`,
+	)
 
 	// (optional) onOpen
-	if (onOpen)
-		assert(
-			typeof onOpen === "function",
-			`"onOpen" must be a function (received ${typeof onOpen})`,
-		)
+	assert(
+		!onOpen || typeof onOpen === "function",
+		`"onOpen" must be a function (received ${typeof onOpen})`,
+	)
 
 	// resetAfter
 	assert(
-		resetAfter > 0,
-		`"resetAfter" must be milliseconds greater than 0 (received ${resetAfter})`,
+		resetAfter >= 1_000,
+		`"resetAfter" must be milliseconds of at least 1 second (received ${resetAfter})`,
 	)
 	assert(
 		resetAfter >= errorWindow,
-		`"resetAfter" must be milliseconds greater than or equal to "errorWindow" (received ${resetAfter})`,
+		`"resetAfter" must be greater than or equal to "errorWindow" (received ${resetAfter}, expected >= ${errorWindow})`,
 	)
 
 	// retryDelay

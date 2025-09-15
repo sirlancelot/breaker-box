@@ -24,3 +24,9 @@ it.for([
 ])("handles $prop error", ({ prop, value }, { expect }) => {
 	expect(() => parseOptions({ [prop]: value })).toThrowErrorMatchingSnapshot()
 })
+
+it("handles resetAfter < errorWindow", ({ expect }) => {
+	expect(() =>
+		parseOptions({ resetAfter: 1_000, errorWindow: 2_000 }),
+	).toThrowErrorMatchingSnapshot()
+})

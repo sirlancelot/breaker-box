@@ -2,19 +2,21 @@
 
 exports[`handles 'errorIsFailure' error 1`] = `[TypeError: "errorIsFailure" must be a function (received number)]`;
 
-exports[`handles 'errorThreshold' error 1`] = `[TypeError: "errorThreshold" must be a number between 0 and 1 (received -1)]`;
+exports[`handles 'errorThreshold' error 1`] = `[TypeError: "errorThreshold" must be between 0 and 1 (received -1)]`;
 
-exports[`handles 'errorWindow' error 1`] = `[TypeError: "errorWindow" must be milliseconds greater than 0 (received -1)]`;
+exports[`handles 'errorWindow' error 1`] = `[TypeError: "errorWindow" must be milliseconds of at least 1 second (received -1)]`;
 
-exports[`handles 'minimumCandidates' error 1`] = `[TypeError: "minimumCandidates" must be a number greater than 1 (received 0)]`;
+exports[`handles 'minimumCandidates' error 1`] = `[TypeError: "minimumCandidates" must be greater than 0 (received 0)]`;
 
 exports[`handles 'onClose' error 1`] = `[TypeError: "onClose" must be a function (received number)]`;
 
 exports[`handles 'onOpen' error 1`] = `[TypeError: "onOpen" must be a function (received number)]`;
 
-exports[`handles 'resetAfter' error 1`] = `[TypeError: "resetAfter" must be milliseconds greater than 0 (received -1)]`;
+exports[`handles 'resetAfter' error 1`] = `[TypeError: "resetAfter" must be milliseconds of at least 1 second (received -1)]`;
 
 exports[`handles 'retryDelay' error 1`] = `[TypeError: "retryDelay" must be a function (received number)]`;
+
+exports[`handles resetAfter < errorWindow 1`] = `[TypeError: "resetAfter" must be greater than or equal to "errorWindow" (received 1000, expected >= 2000)]`;
 
 exports[`sets defaults 1`] = `
 {
