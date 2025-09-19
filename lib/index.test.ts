@@ -86,9 +86,7 @@ it("re-throws failures", async ({ expect }) => {
 		.mockName("errorIsFailure")
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main, { times: 1 }).calledWith("bad").thenReject(abortOk)
-	const protectedFn = createCircuitBreaker(main, {
-		errorIsFailure,
-	})
+	const protectedFn = createCircuitBreaker(main, { errorIsFailure })
 
 	const result = Promise.allSettled([protectedFn("bad"), protectedFn("bad")])
 

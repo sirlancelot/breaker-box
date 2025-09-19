@@ -26,10 +26,12 @@
 	"scripts": {
 		"build": "pkgroll --clean-dist --src lib --target=node18 --sourcemap --env.NODE_ENV=production",
 		"dev": "vitest",
-		"format": "NODE_OPTIONS='--experimental-strip-types' prettier . --write",
-		"prepublishOnly": "npm run test && npm run build",
+		"format": "prettier --cache --write .",
+		"prepublishOnly": "npm run test:ts && npm run test && npm run build",
 		"reinstall": "rm -rf node_modules package-lock.json && npm install",
-		"test": "vitest --run"
+		"test": "vitest --run",
+		"test:coverage": "vitest --run --coverage",
+		"test:ts": "tsc --noEmit"
 	},
 	"keywords": [
 		"circuit-breaker",
