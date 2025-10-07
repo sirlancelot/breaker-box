@@ -26,6 +26,7 @@ export function createCircuitBreaker<
 		errorWindow,
 		minimumCandidates,
 		onClose,
+		onHalfOpen,
 		onOpen,
 		resetAfter,
 		retryDelay,
@@ -69,7 +70,10 @@ export function createCircuitBreaker<
 		failureCause = cause
 		state = "open"
 		clearTimeout(resetTimer)
-		resetTimer = setTimeout(() => (state = "halfOpen"), resetAfter)
+		resetTimer = setTimeout(() => {
+			state = "halfOpen"
+			onHalfOpen?.()
+		}, resetAfter)
 		onOpen?.(cause)
 	}
 

@@ -10,6 +10,8 @@ exports[`handles 'minimumCandidates' error 1`] = `[TypeError: "minimumCandidates
 
 exports[`handles 'onClose' error 1`] = `[TypeError: "onClose" must be a function (received number)]`;
 
+exports[`handles 'onHalfOpen' error 1`] = `[TypeError: "onHalfOpen" must be a function (received number)]`;
+
 exports[`handles 'onOpen' error 1`] = `[TypeError: "onOpen" must be a function (received number)]`;
 
 exports[`handles 'resetAfter' error 1`] = `[TypeError: "resetAfter" must be milliseconds of at least 1 second (received -1)]`;
@@ -25,6 +27,7 @@ exports[`sets defaults 1`] = `
   "errorWindow": 10000,
   "minimumCandidates": 6,
   "onClose": undefined,
+  "onHalfOpen": undefined,
   "onOpen": undefined,
   "resetAfter": 30000,
   "retryDelay": () => void 0,

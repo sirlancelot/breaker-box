@@ -112,9 +112,10 @@ it("re-throws failures", async ({ expect }) => {
 it("emits events", async ({ expect }) => {
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main).calledWith("good").thenResolve(ok)
-	const emitted: ["close" | "open", ...unknown[]][] = []
+	const emitted: ["close" | "open" | "halfOpen", ...unknown[]][] = []
 	const protectedFn = createCircuitBreaker(main, {
 		onClose: () => emitted.push(["close"]),
+		onHalfOpen: () => emitted.push(["halfOpen"]),
 		onOpen: (cause) => emitted.push(["open", cause]),
 	})
 
@@ -128,7 +129,7 @@ it("emits events", async ({ expect }) => {
 	vi.advanceTimersByTime(30_000)
 
 	result = await protectedFn("good")
-	expect(emitted).toEqual([["open", errorOk], ["close"]])
+	expect(emitted).toEqual([["open", errorOk], ["halfOpen"], ["close"]])
 
 	expect(result).toBe(ok)
 })

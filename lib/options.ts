@@ -10,6 +10,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorWindow = 10_000,
 		minimumCandidates = 6,
 		onClose,
+		onHalfOpen,
 		onOpen,
 		resetAfter = 30_000,
 		retryDelay = () => undefined,
@@ -45,6 +46,12 @@ export function parseOptions<Fallback extends AnyFn>(
 		`"onClose" must be a function (received ${typeof onClose})`,
 	)
 
+	// (optional) onHalfOpen
+	assert(
+		!onHalfOpen || typeof onHalfOpen === "function",
+		`"onHalfOpen" must be a function (received ${typeof onHalfOpen})`,
+	)
+
 	// (optional) onOpen
 	assert(
 		!onOpen || typeof onOpen === "function",
@@ -73,6 +80,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorWindow,
 		minimumCandidates,
 		onClose,
+		onHalfOpen,
 		onOpen,
 		resetAfter,
 		retryDelay,

@@ -50,6 +50,12 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	onClose?: () => void
 
 	/**
+	 * Provide a function to be called when the circuit breaker transitions to
+	 * half-open state.
+	 */
+	onHalfOpen?: () => void
+
+	/**
 	 * Provide a function to be called when the circuit breaker is opened. It
 	 * receives the error as its only argument.
 	 */

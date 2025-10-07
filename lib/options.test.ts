@@ -18,6 +18,7 @@ it.for([
 	{ prop: "errorWindow", value: -1 },
 	{ prop: "minimumCandidates", value: 0 },
 	{ prop: "onClose", value: 42 },
+	{ prop: "onHalfOpen", value: 42 },
 	{ prop: "onOpen", value: 42 },
 	{ prop: "resetAfter", value: -1 },
 	{ prop: "retryDelay", value: 42 },
