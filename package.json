@@ -34,20 +34,21 @@
 		"test:ts": "tsc --noEmit"
 	},
 	"keywords": [
-		"circuit-breaker",
+		"async",
 		"fallback",
+		"fault-tolerance",
 		"reliability",
 		"try-again"
 	],
 	"author": "Matthew Pietz <sirlancelot@gmail.com>",
 	"license": "ISC",
 	"devDependencies": {
-		"@types/node": "24.7.0",
-		"@vitest/coverage-v8": "3.2.4",
-		"pkgroll": "2.18.0",
-		"prettier": "3.6.2",
+		"@types/node": "24.10.2",
+		"@vitest/coverage-v8": "4.0.15",
+		"pkgroll": "2.21.4",
+		"prettier": "3.7.4",
 		"typescript": "5.9.3",
-		"vitest": "3.2.4",
-		"vitest-when": "0.8.1"
+		"vitest": "4.0.15",
+		"vitest-when": "0.10.0"
 	}
 }
