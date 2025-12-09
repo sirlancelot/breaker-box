@@ -1,5 +1,7 @@
 import type { AnyFn } from "./util"
 
+export const disposeKey = Symbol("disposeKey")
+
 export type CircuitState = "closed" | "halfOpen" | "open"
 
 export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
@@ -68,35 +70,6 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	 * @default 30_000 // 30 seconds
 	 */
 	resetAfter?: number
-
-	/**
-	 * Provide a function which returns a promise that resolves when the next
-	 * retry attempt should be made. Use this to implement custom retry logic,
-	 * such as exponential backoff.
-	 *
-	 * Note that `attempt` always starts at 2, since first attempts are always
-	 * made as soon as they come in.
-	 *
-	 * @default none // Retry errors immediately
-	 * @example
-	 * ```ts
-	 * // Constant delay of 1 second for all retries
-	 * const breaker = createCircuitBreaker(main, {
-	 * 	 retryDelay: () => delayMs(1_000),
-	 * })
-	 *
-	 * // Double the previous delay each time, up to 30 seconds
-	 * const breaker = createCircuitBreaker(main, {
-	 * 	 retryDelay: useExponentialBackoff(30),
-	 * })
-	 *
-	 * // Use Fibonacci sequence for delay, up to 90 seconds
-	 * const breaker = createCircuitBreaker(main, {
-	 * 	 retryDelay: useFibonacciBackoff(90),
-	 * })
-	 * ```
-	 */
-	retryDelay?: (attempt: number, signal: AbortSignal) => Promise<void>
 }
 
 export interface CircuitBreakerProtectedFn<
@@ -127,6 +100,8 @@ export interface HistoryEntry {
 
 export type HistoryMap = Map<Promise<unknown>, HistoryEntry>
 
-export type MainFn<Ret = unknown, Args extends unknown[] = never[]> = (
-	...args: Args
-) => Promise<Ret>
+export interface MainFn<Ret = unknown, Args extends unknown[] = never[]> {
+	(...args: Args): Promise<Ret>
+
+	[disposeKey]?: (disposeMessage?: string) => void
+}

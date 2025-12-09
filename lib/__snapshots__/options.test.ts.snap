@@ -16,8 +16,6 @@ exports[`handles 'onOpen' error 1`] = `[TypeError: "onOpen" must be a function (
 
 exports[`handles 'resetAfter' error 1`] = `[TypeError: "resetAfter" must be milliseconds of at least 1 second (received -1)]`;
 
-exports[`handles 'retryDelay' error 1`] = `[TypeError: "retryDelay" must be a function (received number)]`;
-
 exports[`handles resetAfter < errorWindow 1`] = `[TypeError: "resetAfter" must be greater than or equal to "errorWindow" (received 1000, expected >= 2000)]`;
 
 exports[`sets defaults 1`] = `
@@ -30,6 +28,5 @@ exports[`sets defaults 1`] = `
   "onHalfOpen": undefined,
   "onOpen": undefined,
   "resetAfter": 30000,
-  "retryDelay": () => void 0,
 }
 `;

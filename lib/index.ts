@@ -1,13 +1,14 @@
 import { parseOptions } from "./options.js"
-import type {
-	HistoryEntry,
-	HistoryMap,
-	CircuitBreakerOptions,
-	CircuitBreakerProtectedFn,
-	CircuitState,
-	MainFn,
+import {
+	disposeKey,
+	type CircuitBreakerOptions,
+	type CircuitBreakerProtectedFn,
+	type CircuitState,
+	type HistoryEntry,
+	type HistoryMap,
+	type MainFn,
 } from "./types.js"
-import { assertNever, rejectOnAbort, type AnyFn } from "./util.js"
+import { assertNever, type AnyFn } from "./util.js"
 
 export * from "./helpers.js"
 export { delayMs } from "./util.js"
@@ -29,7 +30,6 @@ export function createCircuitBreaker<
 		onHalfOpen,
 		onOpen,
 		resetAfter,
-		retryDelay,
 	} = parseOptions(options)
 	const controller = new AbortController()
 	const history: HistoryMap = new Map()
@@ -84,7 +84,7 @@ export function createCircuitBreaker<
 			history.delete(pending)
 			signal.removeEventListener("abort", teardown)
 		}
-		signal.addEventListener("abort", teardown)
+		signal.addEventListener("abort", teardown, { once: true })
 		const settle = (value: "resolved" | "rejected") => {
 			if (signal.aborted) return
 			entry.status = value
@@ -98,7 +98,7 @@ export function createCircuitBreaker<
 	/**
 	 * Wrap calls to `main` with circuit breaker logic
 	 */
-	function execute(attempt: number, args: Args): Promise<Ret> {
+	function execute(args: Args): Promise<Ret> {
 		// Normal operation when circuit is closed. If an error occurs, keep track
 		// of the failure count and open the circuit if it exceeds the threshold.
 		if (state === "closed") {
@@ -108,21 +108,18 @@ export function createCircuitBreaker<
 					settle("resolved")
 					return result
 				},
-				async (cause: unknown) => {
-					// Was the circuit disposed, or was this a non-retryable error?
+				(cause: unknown) => {
+					// Was the circuit disposed, or is this error considered a failure?
 					if (signal.aborted || errorIsFailure(cause)) {
 						teardown()
 						throw cause
 					}
 
-					// Should this failure open the circuit?
+					// Should this error open the circuit?
 					settle("rejected")
 					if (failureRate() > errorThreshold) openCircuit(cause)
 
-					// Retry the call after a delay.
-					const next = attempt + 1
-					await rejectOnAbort(signal, retryDelay(next, signal))
-					return execute(next, args)
+					return fallback(...args)
 				},
 			)
 		}
@@ -145,17 +142,13 @@ export function createCircuitBreaker<
 						closeCircuit()
 						return result
 					},
-					async (cause: unknown) => {
+					(cause: unknown) => {
 						// Was the circuit disposed, or was this a non-retryable error?
 						if (signal.aborted || errorIsFailure(cause)) throw cause
 
-						// Open the circuit and try again later
+						// Open the circuit and use fallback
 						openCircuit(cause)
-
-						// Retry the call after a delay.
-						const next = attempt + 1
-						await rejectOnAbort(signal, retryDelay(next, signal))
-						return execute(next, args)
+						return fallback(...args)
 					},
 				)
 			/* v8 ignore next */
@@ -166,9 +159,10 @@ export function createCircuitBreaker<
 		return assertNever(state)
 	}
 
-	return Object.assign((...args: Args) => execute(1, args), {
+	return Object.assign((...args: Args) => execute(args), {
 		dispose: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
 			const reason = new ReferenceError(disposeMessage)
+			main[disposeKey]?.(disposeMessage)
 			clearFailure()
 			clearTimeout(resetTimer)
 			history.forEach((entry) => clearTimeout(entry.timer))

@@ -33,12 +33,12 @@ export const rejectOnAbort = <T extends Promise<unknown> | undefined>(
 ): Promise<Awaited<T>> => {
 	let teardown: () => void
 	return Promise.race([
-		Promise.resolve(pending).finally(() =>
-			signal.removeEventListener("abort", teardown),
-		),
+		Promise.resolve(pending).finally(() => {
+			signal.removeEventListener("abort", teardown)
+		}),
 		new Promise<never>((_, reject) => {
 			teardown = () => reject(signal.reason)
-			signal.addEventListener("abort", teardown)
+			signal.addEventListener("abort", teardown, { once: true })
 		}),
 	])
 }

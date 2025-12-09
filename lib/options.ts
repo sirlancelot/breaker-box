@@ -13,7 +13,6 @@ export function parseOptions<Fallback extends AnyFn>(
 		onHalfOpen,
 		onOpen,
 		resetAfter = 30_000,
-		retryDelay = () => undefined,
 	} = options
 
 	// errorIsFailure
@@ -68,12 +67,6 @@ export function parseOptions<Fallback extends AnyFn>(
 		`"resetAfter" must be greater than or equal to "errorWindow" (received ${resetAfter}, expected >= ${errorWindow})`,
 	)
 
-	// retryDelay
-	assert(
-		typeof retryDelay === "function",
-		`"retryDelay" must be a function (received ${typeof retryDelay})`,
-	)
-
 	return {
 		errorIsFailure,
 		errorThreshold,
@@ -83,6 +76,5 @@ export function parseOptions<Fallback extends AnyFn>(
 		onHalfOpen,
 		onOpen,
 		resetAfter,
-		retryDelay,
 	}
 }

@@ -1,5 +1,5 @@
-import type { MainFn } from "./types.js"
-import { delayMs } from "./util.js"
+import { disposeKey, type MainFn } from "./types.js"
+import { assert, delayMs, rejectOnAbort } from "./util.js"
 
 /**
  * Returns a function which implements exponential backoff.
@@ -37,6 +37,101 @@ export function useFibonacciBackoff(maxSeconds: number) {
 	}
 }
 
+export interface RetryOptions {
+	/**
+	 * Whether an error should be treated as non-retryable. When this returns
+	 * true, the error will be thrown immediately without retrying.
+	 *
+	 * @default () => false // All errors are retried
+	 */
+	shouldRetry?: (error: unknown, attempt: number) => boolean
+
+	/**
+	 * Maximum number of retries
+	 *
+	 * @default 3
+	 */
+	maxAttempts?: number
+
+	/**
+	 * Function that returns a promise resolving when the next retry should occur.
+	 * Receives the attempt number (starting at 2) and an abort signal.
+	 *
+	 * @default () => Promise.resolve() // Immediate retry
+	 */
+	retryDelay?: (attempt: number, signal: AbortSignal) => Promise<void>
+}
+
+/**
+ * Wrap a function with retry logic. Errors will be retried according to the
+ * provided options.
+ *
+ * @example
+ * ```ts
+ * // Compose with circuit breaker. Retry up to 3 times with no delay
+ * const protectedA = createCircuitBreaker(
+ *   withRetry(unreliableApiCall, { maxAttempts: 3 })
+ * )
+ *
+ * // Retry up to 5 times with exponential backoff
+ * const protectedB = createCircuitBreaker(
+ *   withRetry(unreliableApiCall, {
+ *     maxAttempts: 5,
+ *     retryDelay: useExponentialBackoff(30),
+ *   })
+ * )
+ * ```
+ */
+export function withRetry<Ret, Args extends unknown[]>(
+	main: MainFn<Ret, Args>,
+	options: RetryOptions = {},
+): MainFn<Ret, Args> {
+	const {
+		shouldRetry = () => true,
+		maxAttempts = 3,
+		retryDelay = () => Promise.resolve(),
+	} = options
+
+	assert(maxAttempts >= 1, "maxAttempts must be a number greater than 0")
+
+	const controller = new AbortController()
+	const { signal } = controller
+
+	async function execute(args: Args, attempt = 1): Promise<Ret> {
+		try {
+			return await main(...args)
+		} catch (cause) {
+			// Check if we should retry this error
+			if (!shouldRetry(cause, attempt)) throw cause
+
+			// Check if we've exhausted attempts
+			if (attempt >= maxAttempts)
+				throw new Error(`ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${maxAttempts})`, {
+					cause,
+				})
+
+			// Wait before retrying
+			await rejectOnAbort(signal, retryDelay(attempt + 1, signal))
+
+			// Retry
+			return execute(args, attempt + 1)
+		}
+	}
+
+	return Object.assign(
+		function withRetryFunction(...args: Args) {
+			return execute(args)
+		},
+		{
+			[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+				const reason = new ReferenceError(disposeMessage)
+				main[disposeKey]?.(disposeMessage)
+				controller.abort(reason)
+			},
+		},
+	)
+}
+
 /**
  * Wrap a function with a timeout. If execution of `main` exceeds `timeoutMs`,
  * then the call is rejected with `new Error(timeoutMessage)`.
@@ -47,14 +142,33 @@ export function withTimeout<Ret, Args extends unknown[]>(
 	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT",
 ): MainFn<Ret, Args> {
 	const error = new Error(timeoutMessage)
+	const controller = new AbortController()
+	const { signal } = controller
 
-	return function withTimeoutFunction(...args) {
+	function withTimeoutFunction(...args: Args) {
+		let teardown: () => void
 		let timer: NodeJS.Timeout
 		return Promise.race([
-			main(...args).finally(() => clearTimeout(timer)),
+			main(...args).finally(() => {
+				clearTimeout(timer)
+				signal.removeEventListener("abort", teardown)
+			}),
 			new Promise<never>((_, reject) => {
+				teardown = () => {
+					clearTimeout(timer)
+					reject(signal.reason)
+				}
 				timer = setTimeout(reject, timeoutMs, error)
+				signal.addEventListener("abort", teardown, { once: true })
 			}),
 		])
 	}
+
+	return Object.assign(withTimeoutFunction, {
+		[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+			const reason = new ReferenceError(disposeMessage)
+			main[disposeKey]?.(disposeMessage)
+			controller.abort(reason)
+		},
+	})
 }

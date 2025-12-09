@@ -21,7 +21,6 @@ it.for([
 	{ prop: "onHalfOpen", value: 42 },
 	{ prop: "onOpen", value: 42 },
 	{ prop: "resetAfter", value: -1 },
-	{ prop: "retryDelay", value: 42 },
 ])("handles $prop error", ({ prop, value }, { expect }) => {
 	expect(() => parseOptions({ [prop]: value })).toThrowErrorMatchingSnapshot()
 })
