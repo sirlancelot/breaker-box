@@ -6,7 +6,7 @@ import {
 	withRetry,
 	withTimeout,
 } from "./helpers.js"
-import { disposeKey, MainFn } from "./types.js"
+import { disposeKey } from "./types.js"
 
 const errorOk = new Error("ok")
 const ok = Symbol("ok")
@@ -60,6 +60,16 @@ describe("useExponentialBackoff", () => {
 		expect(elapsed).toEqual(42_000)
 		await expect(result).resolves.toBeUndefined()
 	})
+
+	it("stops timer on abort signal", async ({ expect }) => {
+		const subject = useExponentialBackoff(Infinity)
+		const controller = new AbortController()
+
+		const result = subject(10, controller.signal)
+		controller.abort(errorOk)
+
+		await expect(result).rejects.toThrow(errorOk)
+	})
 })
 
 describe("useFibonacciBackoff", () => {
@@ -98,6 +108,16 @@ describe("useFibonacciBackoff", () => {
 		const elapsed = Date.now() - now
 		expect(elapsed).toEqual(42_000)
 		await expect(result).resolves.toBeUndefined()
+	})
+
+	it("stops timer on abort signal", async ({ expect }) => {
+		const subject = useFibonacciBackoff(Infinity)
+		const controller = new AbortController()
+
+		const result = subject(10, controller.signal)
+		controller.abort(errorOk)
+
+		await expect(result).rejects.toThrow(errorOk)
 	})
 })
 

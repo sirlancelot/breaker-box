@@ -8,6 +8,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorIsFailure = () => false,
 		errorThreshold = 0,
 		errorWindow = 10_000,
+		fallback,
 		minimumCandidates = 6,
 		onClose,
 		onHalfOpen,
@@ -31,6 +32,12 @@ export function parseOptions<Fallback extends AnyFn>(
 	assert(
 		errorWindow >= 1_000,
 		`"errorWindow" must be milliseconds of at least 1 second (received ${errorWindow})`,
+	)
+
+	// (optional) fallback
+	assert(
+		!fallback || typeof fallback === "function",
+		`"fallback" must be a function (received ${typeof fallback})`,
 	)
 
 	// minimumCandidates
