@@ -1,10 +1,11 @@
 import { expect, it } from "vitest"
 import { parseOptions } from "./options.js"
+import type { AnyFn } from "./util.js"
 
 // Serialize functions by showing their source code
 expect.addSnapshotSerializer({
 	test: (value) => value instanceof Function,
-	serialize: (value: Function) => JSON.stringify(value.toString()).slice(1, -1),
+	serialize: (value: AnyFn) => JSON.stringify(value.toString()).slice(1, -1),
 })
 
 it("sets defaults", ({ expect }) => {

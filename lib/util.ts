@@ -1,4 +1,4 @@
-export type AnyFn = (...args: any[]) => any
+export type AnyFn = (...args: never) => unknown
 
 /**
  * Asserts that the given value is truthy. If not, throws a `TypeError`.
@@ -13,32 +13,48 @@ export function assert(value: unknown, message?: string): asserts value {
  * have been handled. If a new value is added to the type, TypeScript will
  * throw an error and the editor will underline the `value`.
  */
-/* v8 ignore next 3 */
-export const assertNever = (val: never, msg = "Unexpected value") => {
-	throw new TypeError(`${msg}: ${val}`)
+/* v8 ignore next -- @preserve */
+export const assertNever = (val: never, msg = "Unexpected value"): never => {
+	throw new TypeError(`${msg}: ${val as string}`)
 }
 
 /**
  * Returns a promise that resolves after the specified number of milliseconds.
  */
-export const delayMs = (ms: number): Promise<void> =>
-	new Promise((next) => setTimeout(next, ms))
+export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> =>
+	signal
+		? new Promise((resolve, reject) => {
+				signal.throwIfAborted()
+
+				const timer = setTimeout(() => {
+					signal.removeEventListener("abort", onAbort)
+					resolve()
+				}, ms)
+
+				const onAbort = () => {
+					clearTimeout(timer)
+					reject(signal.reason)
+				}
+
+				signal.addEventListener("abort", onAbort, { once: true })
+			})
+		: new Promise((next) => setTimeout(next, ms))
 
 /**
- * Rejects the given promise when the abort signal is triggered.
+ * Returns a promise which rejects when the abort signal is triggered or
+ * resolves when the promise is fulfilled.
  */
-export const rejectOnAbort = <T extends Promise<unknown> | undefined>(
+export const abortable = <T>(
 	signal: AbortSignal,
-	pending: T,
-): Promise<Awaited<T>> => {
-	let teardown: () => void
-	return Promise.race([
-		Promise.resolve(pending).finally(() => {
-			signal.removeEventListener("abort", teardown)
-		}),
-		new Promise<never>((_, reject) => {
-			teardown = () => reject(signal.reason)
-			signal.addEventListener("abort", teardown, { once: true })
-		}),
-	])
-}
+	pending: PromiseLike<T>,
+): Promise<T> =>
+	new Promise((resolve, reject) => {
+		signal.throwIfAborted()
+
+		const onAbort = () => reject(signal.reason)
+		signal.addEventListener("abort", onAbort, { once: true })
+
+		Promise.resolve(pending)
+			.then(resolve, reject)
+			.finally(() => signal.removeEventListener("abort", onAbort))
+	})

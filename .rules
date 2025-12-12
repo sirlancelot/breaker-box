@@ -1,0 +1,126 @@
+# Breaker Box - Circuit Breaker Library
+
+## Architecture Overview
+
+Zero-dependency Node.js circuit breaker with three states: `closed` (normal), `open` (failing), `halfOpen` (testing recovery). Core state machine in `lib/index.ts` tracks failures over sliding window and prevents cascading failures.
+
+**Separation of Concerns:**
+- Circuit breaker (`createCircuitBreaker`) tracks failure rates, manages state transitions, prevents calls when threshold exceeded
+- Retry logic (`withRetry`) handles transient failures with configurable backoff strategies
+- Timeout wrapper (`withTimeout`) enforces time limits on operations
+- Functions compose inside-out: `createCircuitBreaker(withRetry(withTimeout(fn)))` applies timeout → retry → circuit breaker
+
+**Key Files:**
+- `lib/index.ts` - State machine, history tracking, timer management
+- `lib/types.ts` - TypeScript interfaces, `CircuitBreakerOptions`, `disposeKey` symbol
+- `lib/options.ts` - Runtime validation with `assert()`, throws `TypeError` with descriptive messages
+- `lib/helpers.ts` - `withRetry`, `withTimeout`, backoff strategies (exponential/Fibonacci)
+- `lib/util.ts` - `delayMs`, `abortable`, `assert`, `assertNever` for exhaustive checks
+
+**State Machine (Critical):**
+- `closed` → tracks calls in `Map<Promise, HistoryEntry>`, opens when `failureRate() > errorThreshold`
+- `open` → rejects with `fallback()`, starts `resetTimer` to transition after `resetAfter` ms
+- `halfOpen` → allows ONE trial call via `halfOpenPending`, concurrent calls use fallback
+- Success in half-open closes circuit; failure reopens it
+
+## Build & Test
+
+```sh
+npm run build          # pkgroll → dist/index.{cjs,mjs} + declarations
+npm test               # vitest run with type checking
+npm run dev            # vitest watch mode
+npm run test:coverage  # coverage with v8
+npm run lint           # eslint all files
+npm run format         # prettier with cache
+```
+
+Build targets Node 18+, outputs dual CJS/ESM via `exports` in package.json. Only `dist/` published.
+
+## Code Conventions
+
+**Formatting (enforced by .editorconfig + .prettierrc.mjs):**
+- Tabs (size 2), no semicolons, LF endings
+- `useTabs: true`, `semi: false`, `endOfLine: "lf"`
+
+**TypeScript Patterns:**
+- Import with `.js` extension (even for `.ts` files) - required by module resolution
+- Import types: `import type { Foo } from "./types.js"` or `import { type Foo } from "./types.js"`
+- Strict mode enabled - all type checks on
+- Generic signatures preserve `Ret` and `Args` through wrappers
+- `assertNever(value)` in default cases for exhaustive switches
+- Use `/* v8 ignore next -- @preserve */` before unreachable code
+
+**Testing with Vitest:**
+- **Always** use fake timers in `beforeEach`: `vi.useFakeTimers()`
+- **Always** verify cleanup in `afterEach`: `expect(vi.getTimerCount()).toBe(0)`
+- **Always** use `vitest-when` for conditional mocks: `when(fn).calledWith(...args).thenResolve(y)`
+- Mock naming: `vi.fn().mockName("descriptiveName")` for better error messages
+- Parameterized tests: `it.for([{ input, expected }])("...", ({ input, expected }) => {...})`
+- Use real values or `Symbol()` for unique test values: `const ok = Symbol("ok")`
+- Advance timers: `vi.advanceTimersByTime(ms)` or `vi.advanceTimersToNextTimer()`
+- Mock objects with `disposeKey`: `Object.assign(vi.fn(), { [disposeKey]: vi.fn() })`
+
+## Critical Patterns
+
+**Timer Management (Memory Leak Prevention):**
+Two timer types must be cleaned up in `dispose()`:
+1. `resetTimer` - Single timer for `open → halfOpen` transition
+2. `entry.timer` - Per-call timer to remove from history after `errorWindow`
+
+Cleanup pattern:
+```typescript
+dispose: (msg = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+  clearTimeout(resetTimer)
+  history.forEach(entry => clearTimeout(entry.timer))
+  history.clear()
+  controller.abort(reason)
+}
+```
+
+**Error Handling:**
+- `errorIsFailure(error)` - if true, error bypasses circuit metrics (removed from history immediately)
+- Errors passing `errorIsFailure` are thrown without affecting failure tracking
+- Circuit breaker does NOT retry - throws errors to caller immediately
+- Retry is separate (`withRetry`) and composable
+
+**AbortController Pattern:**
+Each wrapper creates `AbortController` for cleanup coordination:
+- `controller.signal` passed to async operations
+- `abortable(signal, promise)` cancels pending operations
+- `dispose()` calls `controller.abort(reason)` and propagates to wrapped functions via `main[disposeKey]?.()`
+
+**Public API Surface:**
+`lib/index.ts` re-exports helpers: `export * from "./helpers.js"` - maintains single import point for consumers
+
+**History Tracking:**
+- `history` is a `Map<Promise, HistoryEntry>` tracking all in-flight and recent calls within `errorWindow`
+- Each entry has `status: "pending" | "resolved" | "rejected"` and `timer` for cleanup
+- `calculateFailureRate()` only counts when `total >= minimumCandidates`
+- Cleanup listeners registered on `signal.addEventListener("abort", teardown)`
+
+**Backoff Functions:**
+Return `(attempt: number, signal: AbortSignal) => Promise<void>`:
+- `useExponentialBackoff(maxSeconds)` - 2^(attempt-2) seconds, capped
+- `useFibonacciBackoff(maxSeconds)` - Fibonacci sequence via Binet's formula, capped
+- Both use `delayMs(ms, signal)` for abortable delays
+
+## When Modifying
+
+**Adding circuit breaker options:**
+1. Update `CircuitBreakerOptions` interface in `types.ts`
+2. Add validation in `parseOptions()` in `options.ts` with `assert()` and descriptive error
+3. Destructure in `parseOptions()` with default value
+4. Use in `createCircuitBreaker()` state machine
+
+**New retry strategies:**
+Add to `helpers.ts` returning `(attempt: number, signal: AbortSignal) => Promise<void>`. Export from `index.ts`.
+
+**State transitions:**
+Modify `execute()` function in `index.ts`. NEVER add retry loops - circuit breaker only tracks/prevents. Test with fake timers to verify timing and cleanup.
+
+**Adding wrapper functions:**
+Follow `withRetry`/`withTimeout` pattern:
+1. Create `AbortController` for cancellation
+2. Implement `[disposeKey]` that calls `main[disposeKey]?.()`
+3. Use `abortable(signal, promise)` for abort support
+4. Return function preserving generic `Ret` and `Args` types

@@ -1,9 +1,23 @@
 import type { AnyFn } from "./util"
 
+/**
+ * Symbol key for internal disposal protocol. Functions implementing this key
+ * can be disposed by circuit breaker wrappers.
+ */
 export const disposeKey = Symbol("disposeKey")
 
+/**
+ * The three possible states of a circuit breaker.
+ *
+ * - `closed`: Normal operation, tracking failures
+ * - `open`: Failing state, rejecting calls or using fallback
+ * - `halfOpen`: Testing recovery with a single trial call
+ */
 export type CircuitState = "closed" | "halfOpen" | "open"
 
+/**
+ * Configuration options for circuit breaker behavior.
+ */
 export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	/**
 	 * Whether an error should be treated as non-retryable failure. When used and
@@ -72,9 +86,13 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	resetAfter?: number
 }
 
+/**
+ * A function wrapped with circuit breaker protection. Includes methods for
+ * state inspection and resource cleanup.
+ */
 export interface CircuitBreakerProtectedFn<
 	Ret = unknown,
-	Args extends unknown[] = never[],
+	Args extends readonly unknown[] = readonly [],
 > {
 	(...args: Args): Promise<Ret>
 
@@ -84,23 +102,41 @@ export interface CircuitBreakerProtectedFn<
 	 *
 	 * @default "ERR_CIRCUIT_BREAKER_DISPOSED"
 	 */
-	dispose(disposeMessage?: string): void
+	dispose(this: void, disposeMessage?: string): void
+
+	/** Get the current failure rate of the circuit breaker */
+	getFailureRate(this: void): number
 
 	/** Get the last error which triggered the circuit breaker */
-	getLatestError(): unknown | undefined
+	getLatestError(this: void): unknown
 
 	/** Get the current state of the circuit breaker */
-	getState(): CircuitState
+	getState(this: void): CircuitState
 }
 
+/**
+ * Tracks the status of a single call within the error window. Contains a timer
+ * for automatic cleanup and the current resolution status.
+ */
 export interface HistoryEntry {
 	timer: NodeJS.Timeout | undefined
 	status: "pending" | "resolved" | "rejected"
 }
 
-export type HistoryMap = Map<Promise<unknown>, HistoryEntry>
+/**
+ * Map tracking all in-flight and recent promises within the error window. Used
+ * to calculate failure rates for circuit breaker decisions.
+ */
+export type HistoryMap<T = unknown> = Map<Promise<T>, HistoryEntry>
 
-export interface MainFn<Ret = unknown, Args extends unknown[] = never[]> {
+/**
+ * The main function signature that can be protected by a circuit breaker. May
+ * optionally implement the disposal protocol via the `disposeKey` symbol.
+ */
+export interface MainFn<
+	Ret = unknown,
+	Args extends readonly unknown[] = never[],
+> {
 	(...args: Args): Promise<Ret>
 
 	[disposeKey]?: (disposeMessage?: string) => void
