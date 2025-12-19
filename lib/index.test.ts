@@ -139,10 +139,10 @@ it("emits events", async ({ expect }) => {
 	await expect(protectedFn()).rejects.toThrow(errorOk)
 
 	vi.advanceTimersByTime(30_000) // resetAfter
+	vi.advanceTimersToNextTimer() // process onHalfOpen
 
 	result = await protectedFn("good")
-	vi.advanceTimersToNextTimer()
-	vi.advanceTimersToNextTimer()
+	vi.advanceTimersToNextTimer() // process onClose
 	expect(emitted).toEqual([["open", errorOk], ["halfOpen"], ["close"]])
 
 	expect(result).toBe(ok)

@@ -23,7 +23,7 @@ exports[`sets defaults 1`] = `
   "errorIsFailure": () => false,
   "errorThreshold": 0,
   "errorWindow": 10000,
-  "minimumCandidates": 6,
+  "minimumCandidates": 1,
   "onClose": undefined,
   "onHalfOpen": undefined,
   "onOpen": undefined,
