@@ -21,8 +21,14 @@ export const assertNever = (val: never, msg = "Unexpected value"): never => {
 /**
  * Returns a promise that resolves after the specified number of milliseconds.
  */
-export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> =>
-	signal
+export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> => {
+	if (!Number.isFinite(ms) || ms < 0) {
+		throw new RangeError(
+			`"ms" must be a finite, non-negative number (received ${ms})`,
+		)
+	}
+
+	return signal
 		? new Promise((resolve, reject) => {
 				signal.throwIfAborted()
 
@@ -39,6 +45,7 @@ export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> =>
 				signal.addEventListener("abort", onAbort, { once: true })
 			})
 		: new Promise((next) => setTimeout(next, ms))
+}
 
 /**
  * Returns a promise which rejects when the abort signal is triggered or

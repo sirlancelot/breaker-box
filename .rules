@@ -12,7 +12,7 @@ Zero-dependency Node.js circuit breaker with three states: `closed` (normal), `o
 
 **Key Files:**
 - `lib/index.ts` - State machine, history tracking, timer management
-- `lib/types.ts` - TypeScript interfaces, `CircuitBreakerOptions`, `disposeKey` symbol
+- `lib/types.ts` - TypeScript interfaces, `CircuitBreakerOptions`, `disposeKey` symbol (internal)
 - `lib/options.ts` - Runtime validation with `assert()`, throws `TypeError` with descriptive messages
 - `lib/helpers.ts` - `withRetry`, `withTimeout`, backoff strategies (exponential/Fibonacci)
 - `lib/util.ts` - `delayMs`, `abortable`, `assert`, `assertNever` for exhaustive checks
@@ -59,6 +59,8 @@ Build targets Node 18+, outputs dual CJS/ESM via `exports` in package.json. Only
 - Use real values or `Symbol()` for unique test values: `const ok = Symbol("ok")`
 - Advance timers: `vi.advanceTimersByTime(ms)` or `vi.advanceTimersToNextTimer()`
 - Mock objects with `disposeKey`: `Object.assign(vi.fn(), { [disposeKey]: vi.fn() })`
+- Test files mirror source files: `util.ts` → `util.test.ts`, `helpers.ts` → `helpers.test.ts`
+- When callbacks are deferred via `setImmediate`, advance timers to process them before assertions
 
 ## Critical Patterns
 
@@ -91,6 +93,14 @@ Each wrapper creates `AbortController` for cleanup coordination:
 
 **Public API Surface:**
 `lib/index.ts` re-exports helpers: `export * from "./helpers.js"` - maintains single import point for consumers
+- Public types exported: `CircuitBreakerOptions`, `CircuitBreakerProtectedFn`, `CircuitState`, `MainFn`, `RetryOptions`
+- `disposeKey` is internal - NOT exported from public API, only used by wrapper implementations
+
+**Callback Consistency:**
+All state transition callbacks (`onOpen`, `onClose`, `onHalfOpen`) use `setImmediate` for deferred execution:
+- Ensures state is fully updated before callback runs
+- Prevents issues if callback throws
+- Maintains consistent async behavior across all callbacks
 
 **History Tracking:**
 - `history` is a `Map<Promise, HistoryEntry>` tracking all in-flight and recent calls within `errorWindow`
@@ -106,11 +116,17 @@ Return `(attempt: number, signal: AbortSignal) => Promise<void>`:
 
 ## When Modifying
 
+**Documentation:**
+- **Always** update `README.md` when changing public API (exported functions, types, options, defaults, behavior)
+- Update both example code and API reference sections
+- Keep documentation in sync with implementation
+
 **Adding circuit breaker options:**
 1. Update `CircuitBreakerOptions` interface in `types.ts`
 2. Add validation in `parseOptions()` in `options.ts` with `assert()` and descriptive error
 3. Destructure in `parseOptions()` with default value
 4. Use in `createCircuitBreaker()` state machine
+5. Update `README.md` with new option details and default value
 
 **New retry strategies:**
 Add to `helpers.ts` returning `(attempt: number, signal: AbortSignal) => Promise<void>`. Export from `index.ts`.
@@ -124,3 +140,18 @@ Follow `withRetry`/`withTimeout` pattern:
 2. Implement `[disposeKey]` that calls `main[disposeKey]?.()`
 3. Use `abortable(signal, promise)` for abort support
 4. Return function preserving generic `Ret` and `Args` types
+
+**Error Construction Placement:**
+Create `Error` objects at wrapper construction time (not inside callbacks) to capture meaningful stack traces:
+```typescript
+// CORRECT - stack trace points to where withTimeout was called
+const error = new Error(timeoutMessage)
+function withTimeoutFunction(...args) {
+  setTimeout(reject, timeoutMs, error)
+}
+
+// WRONG - stack trace only shows internal timer callback
+function withTimeoutFunction(...args) {
+  setTimeout(reject, timeoutMs, new Error(timeoutMessage))
+}
+```

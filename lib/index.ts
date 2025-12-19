@@ -11,6 +11,12 @@ import {
 import { assertNever } from "./util.js"
 
 export * from "./helpers.js"
+export {
+	type CircuitBreakerOptions,
+	type CircuitBreakerProtectedFn,
+	type CircuitState,
+	type MainFn,
+} from "./types.js"
 export { delayMs } from "./util.js"
 
 /**
@@ -107,7 +113,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	function halfOpenCircuit() {
 		state = "halfOpen"
 		halfOpenPending = undefined
-		onHalfOpen?.()
+		if (onHalfOpen) setImmediate(onHalfOpen)
 	}
 
 	function createHistoryItem<T>(pending: Promise<T>) {

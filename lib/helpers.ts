@@ -118,39 +118,33 @@ export function withRetry<Ret, Args extends readonly unknown[]>(
 	const controller = new AbortController()
 	const { signal } = controller
 
-	async function execute(args: Args, attempt = 1): Promise<Ret> {
-		try {
-			return await main(...args)
-		} catch (cause) {
-			// Check if we should retry this error
-			if (!shouldRetry(cause, attempt)) throw cause
+	async function withRetryFunction(...args: Args): Promise<Ret> {
+		let attempt = 1
+		while (true) {
+			try {
+				return await main(...args)
+			} catch (cause) {
+				if (attempt >= maxAttempts) {
+					throw new Error(`ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${maxAttempts})`, {
+						cause,
+					})
+				}
 
-			// Check if we've exhausted attempts
-			if (attempt >= maxAttempts)
-				throw new Error(`ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${maxAttempts})`, {
-					cause,
-				})
+				if (!shouldRetry(cause, attempt)) throw cause
+			}
 
-			// Wait before retrying
-			await abortable(signal, retryDelay(attempt + 1, signal))
-
-			// Retry
-			return execute(args, attempt + 1)
+			attempt++
+			await abortable(signal, retryDelay(attempt, signal))
 		}
 	}
 
-	return Object.assign(
-		function withRetryFunction(...args: Args) {
-			return execute(args)
+	return Object.assign(withRetryFunction, {
+		[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+			const reason = new ReferenceError(disposeMessage)
+			main[disposeKey]?.(disposeMessage)
+			controller.abort(reason)
 		},
-		{
-			[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
-				const reason = new ReferenceError(disposeMessage)
-				main[disposeKey]?.(disposeMessage)
-				controller.abort(reason)
-			},
-		},
-	)
+	})
 }
 
 /**

@@ -1,6 +1,12 @@
 import { expectTypeOf, it } from "vitest"
-import { createCircuitBreaker } from "./index.js"
-import type { CircuitBreakerProtectedFn } from "./types.js"
+import {
+	createCircuitBreaker,
+	type CircuitBreakerOptions,
+	type CircuitBreakerProtectedFn,
+	type CircuitState,
+	type MainFn,
+	type RetryOptions,
+} from "./index.js"
 
 it("handles no arguments", () => {
 	const noArgs = () => Promise.resolve("result" as const)
@@ -63,4 +69,21 @@ it("forces fallback to match main", () => {
 	expectTypeOf(protectedComplete).toEqualTypeOf<
 		CircuitBreakerProtectedFn<"ok", [number, string, boolean]>
 	>()
+})
+
+it("exports types from main entry point", () => {
+	expectTypeOf<CircuitState>().toEqualTypeOf<"closed" | "open" | "halfOpen">()
+
+	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorThreshold")
+	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorWindow")
+	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("resetAfter")
+
+	expectTypeOf<MainFn<string, [number]>>().toBeCallableWith(42)
+	expectTypeOf<MainFn<string, [number]>>().returns.toEqualTypeOf<
+		Promise<string>
+	>()
+
+	expectTypeOf<RetryOptions>().toHaveProperty("shouldRetry")
+	expectTypeOf<RetryOptions>().toHaveProperty("maxAttempts")
+	expectTypeOf<RetryOptions>().toHaveProperty("retryDelay")
 })

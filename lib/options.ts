@@ -9,7 +9,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorThreshold = 0,
 		errorWindow = 10_000,
 		fallback,
-		minimumCandidates = 6,
+		minimumCandidates = 1,
 		onClose,
 		onHalfOpen,
 		onOpen,
