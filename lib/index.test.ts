@@ -30,6 +30,7 @@ it("operates transparently", async ({ expect }) => {
 
 	expect(result).toBe(ok)
 	expect(protectedFn.getState()).toBe("closed")
+	expect(protectedFn.getFailureRate()).toBe(0)
 
 	vi.advanceTimersByTime(10_000) // `errorWindow`
 })
@@ -132,13 +133,16 @@ it("emits events", async ({ expect }) => {
 	let result: unknown = protectedFn("bad")
 
 	await expect(result).rejects.toThrow(errorOk)
+	vi.advanceTimersToNextTimer()
 	expect(emitted).toEqual([["open", errorOk]])
 
 	await expect(protectedFn()).rejects.toThrow(errorOk)
 
 	vi.advanceTimersByTime(30_000) // resetAfter
+	vi.advanceTimersToNextTimer() // process onHalfOpen
 
 	result = await protectedFn("good")
+	vi.advanceTimersToNextTimer() // process onClose
 	expect(emitted).toEqual([["open", errorOk], ["halfOpen"], ["close"]])
 
 	expect(result).toBe(ok)
@@ -218,4 +222,35 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 
 	vi.advanceTimersByTime(1)
 	await expect(result).rejects.toThrow(errorOk)
+})
+
+it("handles concurrent calls in half-open state", async ({ expect }) => {
+	when(main).calledWith("initial").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	when(fallback).calledWith("initial").thenResolve(fallbackOk)
+	when(fallback).calledWith().thenResolve(fallbackOk)
+	const protectedFn = createCircuitBreaker(main, {
+		fallback,
+		minimumCandidates: 1,
+	})
+
+	await expect(protectedFn("initial")).resolves.toBe(fallbackOk)
+	expect(protectedFn.getState()).toBe("open")
+
+	vi.advanceTimersByTime(30_000)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	const firstCall = protectedFn("good")
+	const secondCall = protectedFn()
+	const thirdCall = protectedFn()
+
+	await expect(firstCall).resolves.toBe(ok)
+	await expect(secondCall).resolves.toBe(fallbackOk)
+	await expect(thirdCall).resolves.toBe(fallbackOk)
+
+	expect(main).toHaveBeenCalledTimes(2)
+	expect(fallback).toHaveBeenCalledTimes(3)
+	expect(protectedFn.getState()).toBe("closed")
+
+	vi.advanceTimersByTime(10_000)
 })

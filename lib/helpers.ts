@@ -1,39 +1,60 @@
 import { disposeKey, type MainFn } from "./types.js"
-import { assert, delayMs, rejectOnAbort } from "./util.js"
+import { assert, delayMs, abortable } from "./util.js"
 
 /**
- * Returns a function which implements exponential backoff.
+ * Creates an exponential backoff strategy for retry delays.
+ * Delay grows as 2^(attempt-2) seconds, capped at maxSeconds.
  *
- * @param maxSeconds - The maximum number of seconds to wait before retrying.
- * @returns A function which takes an `attempt` number and returns a promise
- * that resolves after the calculated delay.
+ * The sequence is: 1s, 2s, 4s, 8s, 16s, 32s, etc.
+ *
+ * @param maxSeconds - Maximum delay in seconds before capping
+ * @returns Function accepting attempt number and returning delay promise
+ *
+ * @example
+ * ```ts
+ * const backoff = useExponentialBackoff(30)
+ * await backoff(2) // waits 1 second
+ * await backoff(3) // waits 2 seconds
+ * await backoff(10) // waits 30 seconds (capped)
+ * ```
  */
 export function useExponentialBackoff(maxSeconds: number) {
-	return function exponentialBackoff(attempt: number) {
+	return function exponentialBackoff(attempt: number, signal?: AbortSignal) {
 		const num = Math.max(attempt - 2, 0)
 		const delay = Math.min(2 ** num, maxSeconds)
-		return delayMs(delay * 1_000)
+		return delayMs(delay * 1_000, signal)
 	}
 }
 
 const sqrt5 = /* @__PURE__ */ Math.sqrt(5)
 /**
+ * Binet's formula for calculating Fibonacci numbers in constant time.
  * @see https://en.wikipedia.org/wiki/Fibonacci_sequence#Closed-form_expression
  */
 const binet = (n: number) =>
 	Math.round(((1 + sqrt5) ** n - (1 - sqrt5) ** n) / (2 ** n * sqrt5))
 
 /**
- * Returns a function which implements Fibonacci backoff.
+ * Creates a Fibonacci backoff strategy for retry delays.
+ * Delay follows the Fibonacci sequence: 1s, 2s, 3s, 5s, 8s, 13s, etc.
  *
- * @param maxSeconds - The maximum number of seconds to wait before retrying.
- * @returns A function which takes an `attempt` number and returns a promise
- * that resolves after the calculated delay.
+ * More gradual than exponential backoff, useful for less aggressive retry patterns.
+ *
+ * @param maxSeconds - Maximum delay in seconds before capping
+ * @returns Function accepting attempt number and returning delay promise
+ *
+ * @example
+ * ```ts
+ * const backoff = useFibonacciBackoff(60)
+ * await backoff(2) // waits 1 second
+ * await backoff(5) // waits 5 seconds
+ * await backoff(10) // waits 55 seconds
+ * ```
  */
 export function useFibonacciBackoff(maxSeconds: number) {
-	return function fibonacciBackoff(attempt: number) {
+	return function fibonacciBackoff(attempt: number, signal?: AbortSignal) {
 		const delay = Math.min(binet(attempt), maxSeconds)
-		return delayMs(delay * 1_000)
+		return delayMs(delay * 1_000, signal)
 	}
 }
 
@@ -82,9 +103,9 @@ export interface RetryOptions {
  * )
  * ```
  */
-export function withRetry<Ret, Args extends unknown[]>(
+export function withRetry<Ret, Args extends readonly unknown[]>(
 	main: MainFn<Ret, Args>,
-	options: RetryOptions = {},
+	options: Readonly<RetryOptions> = {},
 ): MainFn<Ret, Args> {
 	const {
 		shouldRetry = () => true,
@@ -97,46 +118,50 @@ export function withRetry<Ret, Args extends unknown[]>(
 	const controller = new AbortController()
 	const { signal } = controller
 
-	async function execute(args: Args, attempt = 1): Promise<Ret> {
-		try {
-			return await main(...args)
-		} catch (cause) {
-			// Check if we should retry this error
-			if (!shouldRetry(cause, attempt)) throw cause
+	async function withRetryFunction(...args: Args): Promise<Ret> {
+		let attempt = 1
+		while (true) {
+			try {
+				return await main(...args)
+			} catch (cause) {
+				if (attempt >= maxAttempts) {
+					throw new Error(`ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${maxAttempts})`, {
+						cause,
+					})
+				}
 
-			// Check if we've exhausted attempts
-			if (attempt >= maxAttempts)
-				throw new Error(`ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${maxAttempts})`, {
-					cause,
-				})
+				if (!shouldRetry(cause, attempt)) throw cause
+			}
 
-			// Wait before retrying
-			await rejectOnAbort(signal, retryDelay(attempt + 1, signal))
-
-			// Retry
-			return execute(args, attempt + 1)
+			attempt++
+			await abortable(signal, retryDelay(attempt, signal))
 		}
 	}
 
-	return Object.assign(
-		function withRetryFunction(...args: Args) {
-			return execute(args)
+	return Object.assign(withRetryFunction, {
+		[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+			const reason = new ReferenceError(disposeMessage)
+			main[disposeKey]?.(disposeMessage)
+			controller.abort(reason)
 		},
-		{
-			[disposeKey]: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
-				const reason = new ReferenceError(disposeMessage)
-				main[disposeKey]?.(disposeMessage)
-				controller.abort(reason)
-			},
-		},
-	)
+	})
 }
 
 /**
- * Wrap a function with a timeout. If execution of `main` exceeds `timeoutMs`,
- * then the call is rejected with `new Error(timeoutMessage)`.
+ * Wraps an async function with a timeout constraint. Rejects with an Error if
+ * execution exceeds the specified timeout.
+ *
+ * @example
+ * ```ts
+ * const fetchWithTimeout = withTimeout(fetchData, 5000, "Fetch timed out")
+ * try {
+ *   const data = await fetchWithTimeout(url)
+ * } catch (error) {
+ *   console.error(error.message) // "Fetch timed out" after 5 seconds
+ * }
+ * ```
  */
-export function withTimeout<Ret, Args extends unknown[]>(
+export function withTimeout<Ret, Args extends readonly unknown[]>(
 	main: MainFn<Ret, Args>,
 	timeoutMs: number,
 	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT",
@@ -145,23 +170,14 @@ export function withTimeout<Ret, Args extends unknown[]>(
 	const controller = new AbortController()
 	const { signal } = controller
 
-	function withTimeoutFunction(...args: Args) {
-		let teardown: () => void
-		let timer: NodeJS.Timeout
-		return Promise.race([
-			main(...args).finally(() => {
-				clearTimeout(timer)
-				signal.removeEventListener("abort", teardown)
-			}),
-			new Promise<never>((_, reject) => {
-				teardown = () => {
-					clearTimeout(timer)
-					reject(signal.reason)
-				}
-				timer = setTimeout(reject, timeoutMs, error)
-				signal.addEventListener("abort", teardown, { once: true })
-			}),
-		])
+	function withTimeoutFunction(...args: Args): Promise<Ret> {
+		return new Promise((resolve, reject) => {
+			const timer = setTimeout(reject, timeoutMs, error)
+
+			abortable(signal, main(...args))
+				.then(resolve, reject)
+				.finally(() => clearTimeout(timer))
+		})
 	}
 
 	return Object.assign(withTimeoutFunction, {
