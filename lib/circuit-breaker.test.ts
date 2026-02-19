@@ -1,8 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 import { when } from "vitest-when"
-import { createCircuitBreaker } from "./index.js"
-import { delayMs } from "./util.js"
-import { disposeKey } from "./types.js"
+import { createCircuitBreaker } from "./circuit-breaker.js"
+import { delayMs, disposeKey } from "./util.js"
 
 const errorOk = new Error("ok")
 const ok = Symbol("ok")
@@ -151,7 +150,7 @@ it("emits events", async ({ expect }) => {
 it("handles shutdown", async ({ expect }) => {
 	const protectedFn = createCircuitBreaker(main)
 	protectedFn.dispose()
-	expect(protectedFn.getState()).toBe("open")
+	expect(protectedFn.getState()).toBe("disposed")
 
 	await expect(protectedFn()).rejects.toThrow("ERR_CIRCUIT_BREAKER_DISPOSED")
 })

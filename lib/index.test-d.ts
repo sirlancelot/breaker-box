@@ -19,7 +19,7 @@ it("handles no arguments", () => {
 	expectTypeOf(protectedNoArgs).returns.toEqualTypeOf<Promise<"result">>()
 	expectTypeOf(protectedNoArgs.dispose).toBeFunction()
 	expectTypeOf(protectedNoArgs.getState).returns.toEqualTypeOf<
-		"closed" | "open" | "halfOpen"
+		"closed" | "open" | "halfOpen" | "disposed"
 	>()
 	expectTypeOf(protectedNoArgs.getFailureRate).returns.toEqualTypeOf<number>()
 	expectTypeOf(protectedNoArgs.getLatestError).returns.toEqualTypeOf<unknown>()
@@ -72,7 +72,9 @@ it("forces fallback to match main", () => {
 })
 
 it("exports types from main entry point", () => {
-	expectTypeOf<CircuitState>().toEqualTypeOf<"closed" | "open" | "halfOpen">()
+	expectTypeOf<CircuitState>().toEqualTypeOf<
+		"closed" | "open" | "halfOpen" | "disposed"
+	>()
 
 	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorThreshold")
 	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorWindow")
