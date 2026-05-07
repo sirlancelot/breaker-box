@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { beforeEach, expect, it, vi } from "vitest"
 import { when } from "vitest-when"
 import { createCircuitBreaker } from "./circuit-breaker.js"
 import { delayMs, disposeKey } from "./util.js"
@@ -11,13 +11,18 @@ const main = Object.assign(vi.fn().mockName("main"), {
 	[disposeKey]: vi.fn().mockName("dispose"),
 })
 
-beforeEach(() => {
-	vi.useFakeTimers()
-})
+const expectErrorOpen = expect.objectContaining({
+	message: "ERR_CIRCUIT_BREAKER_OPEN",
+	cause: errorOk,
+}) as Error
 
-afterEach(() => {
-	expect(vi.getTimerCount()).toBe(0)
-	vi.resetAllMocks()
+beforeEach(({ onTestFinished }) => {
+	vi.useFakeTimers()
+	onTestFinished(() => {
+		vi.runAllTimers()
+		expect(vi.getTimerCount()).toBe(0)
+		vi.resetAllMocks()
+	})
 })
 
 it("operates transparently", async ({ expect }) => {
@@ -30,8 +35,6 @@ it("operates transparently", async ({ expect }) => {
 	expect(result).toBe(ok)
 	expect(protectedFn.getState()).toBe("closed")
 	expect(protectedFn.getFailureRate()).toBe(0)
-
-	vi.advanceTimersByTime(10_000) // `errorWindow`
 })
 
 it("handles circuit lifecycle", async ({ expect }) => {
@@ -40,11 +43,11 @@ it("handles circuit lifecycle", async ({ expect }) => {
 	const protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
 
 	// First error opens circuit (minimumCandidates=1, errorThreshold=0)
-	await expect(protectedFn("bad")).rejects.toEqual(errorOk)
+	await expect(protectedFn("bad")).rejects.toThrow(expectErrorOpen)
 	expect(protectedFn.getState()).toBe("open")
 
 	// Circuit is open, subsequent calls fail with latest error
-	await expect(protectedFn()).rejects.toEqual(errorOk)
+	await expect(protectedFn()).rejects.toThrow(expectErrorOpen)
 	expect(protectedFn.getLatestError()).toBe(errorOk)
 
 	vi.advanceTimersByTime(30_000) // resetAfter
@@ -107,15 +110,13 @@ it("re-throws failures", async ({ expect }) => {
 	// Second call gets retryable error, opens circuit
 	const result = Promise.allSettled([protectedFn("bad"), protectedFn("bad")])
 
-	await expect(result).resolves.toEqual([
+	await expect(result).resolves.toMatchObject([
 		{ status: "rejected", reason: abortOk },
-		{ status: "rejected", reason: errorOk },
+		{ status: "rejected", reason: expectErrorOpen },
 	])
 	expect(protectedFn.getState()).toBe("open")
 	expect(errorIsFailure).toHaveBeenCalled()
 	expect(errorIsFailure.mock.calls).toEqual([[abortOk], [errorOk]])
-
-	vi.advanceTimersByTime(30_000) // `resetAfter`
 })
 
 it("emits events", async ({ expect }) => {
@@ -131,11 +132,11 @@ it("emits events", async ({ expect }) => {
 
 	let result: unknown = protectedFn("bad")
 
-	await expect(result).rejects.toThrow(errorOk)
+	await expect(result).rejects.toThrow(expectErrorOpen)
 	vi.advanceTimersToNextTimer()
 	expect(emitted).toEqual([["open", errorOk]])
 
-	await expect(protectedFn()).rejects.toThrow(errorOk)
+	await expect(protectedFn()).rejects.toThrow(expectErrorOpen)
 
 	vi.advanceTimersByTime(30_000) // resetAfter
 	vi.advanceTimersToNextTimer() // process onHalfOpen
@@ -189,7 +190,7 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 
 		const result = protectedFn("initial")
 
-		await expect(result).rejects.toThrow(errorOk)
+		await expect(result).rejects.toThrow(expectErrorOpen)
 
 		vi.advanceTimersByTime(30_000)
 
@@ -223,6 +224,22 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 	await expect(result).rejects.toThrow(errorOk)
 })
 
+it("default fallback rejects with an Error when main rejects with a non-Error", async ({
+	expect,
+}) => {
+	when(main)
+		.calledWith("bad")
+		.thenReject(undefined as never)
+	const protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
+
+	// executeClosed: main rejects with undefined, threshold exceeded, opens circuit, calls fallback
+	await expect(protectedFn("bad")).rejects.toBeInstanceOf(Error)
+
+	// executeOpen: circuit is open, calls fallback directly
+	expect(protectedFn.getState()).toBe("open")
+	await expect(protectedFn()).rejects.toBeInstanceOf(Error)
+})
+
 it("handles concurrent calls in half-open state", async ({ expect }) => {
 	when(main).calledWith("initial").thenReject(errorOk)
 	when(main).calledWith("good").thenResolve(ok)
@@ -250,6 +267,4 @@ it("handles concurrent calls in half-open state", async ({ expect }) => {
 	expect(main).toHaveBeenCalledTimes(2)
 	expect(fallback).toHaveBeenCalledTimes(3)
 	expect(protectedFn.getState()).toBe("closed")
-
-	vi.advanceTimersByTime(10_000)
 })

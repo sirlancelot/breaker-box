@@ -79,7 +79,11 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	let failureCause: unknown
 	let failureRate = 0
 	let fallback: typeof main =
-		userFallback || (() => Promise.reject(failureCause))
+		userFallback ||
+		(() =>
+			Promise.reject(
+				new Error("ERR_CIRCUIT_BREAKER_OPEN", { cause: failureCause }),
+			))
 	let halfOpenPending: Promise<unknown> | undefined
 	let resetTimer: NodeJS.Timeout | undefined
 	let state: CircuitState = "closed"
