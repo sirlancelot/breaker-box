@@ -27,7 +27,7 @@ beforeEach(({ onTestFinished }) => {
 
 it("operates transparently", async ({ expect }) => {
 	when(main).calledWith("arg1", "arg2").thenResolve(ok)
-	const protectedFn = createCircuitBreaker(main)
+	using protectedFn = createCircuitBreaker(main)
 
 	expect(protectedFn.getState()).toBe("closed")
 	const result = await protectedFn("arg1", "arg2")
@@ -40,7 +40,7 @@ it("operates transparently", async ({ expect }) => {
 it("handles circuit lifecycle", async ({ expect }) => {
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main).calledWith("good").thenResolve(ok)
-	const protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
+	using protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
 
 	// First error opens circuit (minimumCandidates=1, errorThreshold=0)
 	await expect(protectedFn("bad")).rejects.toThrow(expectErrorOpen)
@@ -63,7 +63,7 @@ it("handles circuit lifecycle with fallback", async ({ expect }) => {
 	when(main).calledWith("arg1", "arg2").thenReject(new Error("Use fallback"))
 	when(main).calledWith("good").thenResolve(ok)
 	when(fallback).calledWith("arg1", "arg2").thenResolve(fallbackOk)
-	const protectedFn = createCircuitBreaker(main, {
+	using protectedFn = createCircuitBreaker(main, {
 		fallback,
 		minimumCandidates: 1,
 	})
@@ -101,7 +101,7 @@ it("re-throws failures", async ({ expect }) => {
 		.mockName("errorIsFailure")
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main, { times: 1 }).calledWith("bad").thenReject(abortOk)
-	const protectedFn = createCircuitBreaker(main, {
+	using protectedFn = createCircuitBreaker(main, {
 		errorIsFailure,
 		minimumCandidates: 1,
 	})
@@ -123,7 +123,7 @@ it("emits events", async ({ expect }) => {
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main).calledWith("good").thenResolve(ok)
 	const emitted: ["close" | "open" | "halfOpen", ...unknown[]][] = []
-	const protectedFn = createCircuitBreaker(main, {
+	using protectedFn = createCircuitBreaker(main, {
 		minimumCandidates: 1,
 		onClose: () => emitted.push(["close"]),
 		onHalfOpen: () => emitted.push(["halfOpen"]),
@@ -230,7 +230,7 @@ it("default fallback rejects with an Error when main rejects with a non-Error", 
 	when(main)
 		.calledWith("bad")
 		.thenReject(undefined as never)
-	const protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
+	using protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
 
 	// executeClosed: main rejects with undefined, threshold exceeded, opens circuit, calls fallback
 	await expect(protectedFn("bad")).rejects.toBeInstanceOf(Error)
@@ -245,7 +245,7 @@ it("handles concurrent calls in half-open state", async ({ expect }) => {
 	when(main).calledWith("good").thenResolve(ok)
 	when(fallback).calledWith("initial").thenResolve(fallbackOk)
 	when(fallback).calledWith().thenResolve(fallbackOk)
-	const protectedFn = createCircuitBreaker(main, {
+	using protectedFn = createCircuitBreaker(main, {
 		fallback,
 		minimumCandidates: 1,
 	})

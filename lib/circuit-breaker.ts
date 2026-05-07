@@ -233,13 +233,16 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		}
 	}
 
+	const dispose = (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+		if (state === "disposed") return
+		transition("disposed", { cause: new ReferenceError(disposeMessage) })
+	}
+
 	return Object.assign(execute, {
-		dispose: (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
-			if (state === "disposed") return
-			transition("disposed", { cause: new ReferenceError(disposeMessage) })
-		},
+		dispose,
 		getFailureRate: () => failureRate,
 		getLatestError: () => failureCause,
 		getState: () => state,
+		[Symbol.dispose]: () => dispose(),
 	})
 }

@@ -107,6 +107,17 @@ export interface CircuitBreakerProtectedFn<
 
 	/** Get the current state of the circuit breaker */
 	getState(this: void): CircuitState
+
+	/**
+	 * Dispose the circuit breaker using the explicit resource management
+	 * protocol. Equivalent to calling `dispose()` with no arguments.
+	 *
+	 * @example
+	 * ```ts
+	 * using protectedFn = createCircuitBreaker(main)
+	 * ```
+	 */
+	[Symbol.dispose](this: void): void
 }
 
 /**

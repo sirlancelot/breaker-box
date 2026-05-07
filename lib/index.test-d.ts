@@ -23,6 +23,7 @@ it("handles no arguments", () => {
 	>()
 	expectTypeOf(protectedNoArgs.getFailureRate).returns.toEqualTypeOf<number>()
 	expectTypeOf(protectedNoArgs.getLatestError).returns.toEqualTypeOf<unknown>()
+	expectTypeOf(protectedNoArgs[Symbol.dispose]).toBeFunction()
 })
 
 it("handles multiple arguments", () => {
