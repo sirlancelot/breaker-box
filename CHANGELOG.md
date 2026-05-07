@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [7.0.0] - 2026-05-07
+
 ### Added
 
 - `withRetry` wrapper for composable retry logic with configurable `maxAttempts`, `shouldRetry`, and `retryDelay`
@@ -48,6 +50,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...HEAD
+[7.0.0]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...v7.0.0
 [6.0.0]: https://github.com/sirlancelot/breaker-box/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/sirlancelot/breaker-box/releases/tag/v5.0.0
