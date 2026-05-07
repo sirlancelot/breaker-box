@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `withRetry` wrapper for composable retry logic with configurable `maxAttempts`, `shouldRetry`, and `retryDelay`
+- `withTimeout` wrapper for composable timeout constraints on async functions
+- `RetryOptions` type export
+- `Symbol.dispose` support on circuit breaker protected functions for explicit resource management (`using` syntax)
+- `disposed` as a fourth circuit breaker state — a terminal state where all calls are rejected
+- Validated finite-state-machine transitions prevent invalid state changes
+
+### Changed
+
+- **BREAKING**: `CircuitState` type now includes `"disposed"` — code pattern-matching on circuit states must handle this new variant
+- **BREAKING**: Disposed circuit breakers now enter a terminal `disposed` state and reject all subsequent calls, instead of remaining in `open` state with a rejecting fallback
+- **BREAKING**: Default fallback when circuit opens now rejects with `Error("ERR_CIRCUIT_BREAKER_OPEN")` wrapping the failure cause, instead of rejecting with the raw cause
+- **BREAKING**: `disposeKey` symbol moved from `types.ts` to `util.ts` (not part of public API)
+- Internal restructuring: circuit breaker, retry, timeout, backoff, and utilities split into separate modules
+
 ## [6.0.0] - 2026-01-20
 
 ### Added
