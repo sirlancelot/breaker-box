@@ -78,6 +78,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorIsFailure,
 		errorThreshold,
 		errorWindow,
+		fallback,
 		minimumCandidates,
 		onClose,
 		onHalfOpen,

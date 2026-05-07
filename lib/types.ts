@@ -1,19 +1,14 @@
-import type { AnyFn } from "./util"
+import { disposeKey, type AnyFn } from "./util"
 
 /**
- * Symbol key for internal disposal protocol. Functions implementing this key
- * can be disposed by circuit breaker wrappers.
- */
-export const disposeKey = Symbol("disposeKey")
-
-/**
- * The three possible states of a circuit breaker.
+ * The four possible states of a circuit breaker.
  *
  * - `closed`: Normal operation, tracking failures
  * - `open`: Failing state, rejecting calls or using fallback
  * - `halfOpen`: Testing recovery with a single trial call
+ * - `disposed`: Terminal state, all calls rejected
  */
-export type CircuitState = "closed" | "halfOpen" | "open"
+export type CircuitState = "closed" | "halfOpen" | "open" | "disposed"
 
 /**
  * Configuration options for circuit breaker behavior.
@@ -56,7 +51,7 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	 * error rate and determining whether the circuit breaker should open based on
 	 * the `errorThreshold`.
 	 *
-	 * @default 6
+	 * @default 1
 	 */
 	minimumCandidates?: number
 
@@ -112,6 +107,17 @@ export interface CircuitBreakerProtectedFn<
 
 	/** Get the current state of the circuit breaker */
 	getState(this: void): CircuitState
+
+	/**
+	 * Dispose the circuit breaker using the explicit resource management
+	 * protocol. Equivalent to calling `dispose()` with no arguments.
+	 *
+	 * @example
+	 * ```ts
+	 * using protectedFn = createCircuitBreaker(main)
+	 * ```
+	 */
+	[Symbol.dispose](this: void): void
 }
 
 /**
@@ -140,4 +146,32 @@ export interface MainFn<
 	(...args: Args): Promise<Ret>
 
 	[disposeKey]?: (disposeMessage?: string) => void
+}
+
+/**
+ * Configuration options for retry behavior.
+ */
+export interface RetryOptions {
+	/**
+	 * Whether an error should be treated as non-retryable. When this returns
+	 * true, the error will be thrown immediately without retrying.
+	 *
+	 * @default () => true // All errors are retried
+	 */
+	shouldRetry?: (error: unknown, attempt: number) => boolean
+
+	/**
+	 * Maximum number of retries
+	 *
+	 * @default 3
+	 */
+	maxAttempts?: number
+
+	/**
+	 * Function that returns a promise resolving when the next retry should occur.
+	 * Receives the attempt number (starting at 2) and an abort signal.
+	 *
+	 * @default () => Promise.resolve() // Immediate retry
+	 */
+	retryDelay?: (attempt: number, signal: AbortSignal) => Promise<void>
 }

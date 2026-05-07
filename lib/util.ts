@@ -1,10 +1,31 @@
 export type AnyFn = (...args: never) => unknown
 
 /**
+ * Symbol key for internal disposal protocol. Functions implementing this key
+ * can be disposed by circuit breaker wrappers.
+ */
+export const disposeKey = Symbol("disposeKey")
+
+/**
  * Asserts that the given value is truthy. If not, throws a `TypeError`.
  */
 export function assert(value: unknown, message?: string): asserts value {
 	if (!value) throw new TypeError(message)
+}
+
+/**
+ * Creates a dispose handler for wrapped functions. Used by timeout and retry
+ * wrappers to propagate disposal through composed wrappers.
+ */
+export function createDisposable(
+	main: { [disposeKey]?: (message?: string) => void },
+	controller: AbortController,
+) {
+	return (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
+		const reason = new ReferenceError(disposeMessage)
+		main[disposeKey]?.(disposeMessage)
+		controller.abort(reason)
+	}
 }
 
 /**
