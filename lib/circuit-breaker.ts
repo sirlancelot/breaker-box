@@ -181,9 +181,8 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 				}
 
 				failureRate = settle("rejected")
-				if (failureRate > errorThreshold) {
+				if (state === "closed" && failureRate > errorThreshold)
 					transition("open", { cause })
-				}
 
 				return fallback(...args)
 			},

@@ -268,3 +268,18 @@ it("handles concurrent calls in half-open state", async ({ expect }) => {
 	expect(fallback).toHaveBeenCalledTimes(3)
 	expect(protectedFn.getState()).toBe("closed")
 })
+
+it("handles concurrent inflight failures opening the circuit", async ({ expect }) => {
+	main.mockImplementation(() => delayMs(1).then(() => Promise.reject(errorOk)))
+	using protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
+
+	// Two inflight requests fail simultaneously — only the first should trigger the transition
+	const first = protectedFn("bad")
+	const second = protectedFn("bad")
+
+	vi.advanceTimersByTime(1)
+	await expect(first).rejects.toThrow(expectErrorOpen)
+	await expect(second).rejects.toThrow(expectErrorOpen)
+
+	expect(protectedFn.getState()).toBe("open")
+})
