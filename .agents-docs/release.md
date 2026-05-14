@@ -44,7 +44,7 @@ git merge --no-ff develop
 ### 3. Bump version on `master`
 
 ```
-npm version <major|minor|patch> -m "%s"
+npm version <major|minor|patch>
 ```
 
 This single command:
