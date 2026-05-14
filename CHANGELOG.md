@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-05-14
+
 ### Added
 
 - `timeout` option on `createCircuitBreaker` for per-call timeouts via `AbortSignal.timeout`, replacing the need for `withTimeout` composition
@@ -75,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...HEAD
+[8.0.0]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...v8.0.0
 [7.0.0]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...v7.0.0
 [6.0.0]: https://github.com/sirlancelot/breaker-box/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/sirlancelot/breaker-box/releases/tag/v5.0.0

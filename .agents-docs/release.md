@@ -38,7 +38,7 @@ Run all commands from the repository root.
 
 ```
 git checkout master
-git merge -no-ff develop
+git merge --no-ff develop
 ```
 
 ### 3. Bump version on `master`
