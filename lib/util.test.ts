@@ -129,7 +129,7 @@ describe("shouldRetry", () => {
 
 	it("delays with function retryDelay", async ({ expect }) => {
 		const controller = new AbortController()
-		const retryDelay = vi.fn((_attempt: number, signal: AbortSignal) =>
+		const retryDelay = vi.fn((_attempt: number, signal?: AbortSignal) =>
 			delayMs(100, signal),
 		)
 		const result = shouldRetry({
