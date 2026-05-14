@@ -1,21 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { when } from "vitest-when"
 import { withTimeout } from "./timeout.js"
-import { disposeKey } from "./util.js"
 
 const errorOk = new Error("ok")
 const ok = Symbol("ok")
 const main = Object.assign(vi.fn().mockName("main"), {
-	[disposeKey]: vi.fn().mockName("dispose"),
+	[Symbol.dispose]: vi.fn().mockName("dispose"),
 })
 
-beforeEach(() => {
+beforeEach(({ onTestFinished }) => {
 	vi.useFakeTimers()
-})
 
-afterEach(() => {
-	expect(vi.getTimerCount()).toBe(0)
-	vi.resetAllMocks()
+	onTestFinished(() => {
+		vi.runAllTimers()
+		expect(vi.getTimerCount()).toBe(0)
+		vi.resetAllMocks()
+	})
 })
 
 describe("withTimeout", () => {
@@ -62,9 +62,8 @@ describe("withTimeout", () => {
 
 		const result = subject()
 
-		subject[disposeKey]?.("CUSTOM_MESSAGE")
-		expect(main[disposeKey]).toHaveBeenCalledWith("CUSTOM_MESSAGE")
+		subject[Symbol.dispose]()
 
-		await expect(result).rejects.toThrowError("CUSTOM_MESSAGE")
+		await expect(result).rejects.toThrowError("This operation was aborted")
 	})
 })

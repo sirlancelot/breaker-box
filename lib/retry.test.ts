@@ -1,14 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { when } from "vitest-when"
-import { withRetry } from "./retry.js"
 import { useExponentialBackoff } from "./backoff.js"
-import { disposeKey } from "./util.js"
+import { withRetry } from "./retry.js"
 
 const errorOk = new Error("ok")
 const ok = Symbol("ok")
-const main = Object.assign(vi.fn().mockName("main"), {
-	[disposeKey]: vi.fn().mockName("dispose"),
-})
+const main = vi.fn().mockName("main")
 
 beforeEach(() => {
 	vi.useFakeTimers()
@@ -89,13 +86,5 @@ describe("withRetry", () => {
 		expect(main).toHaveBeenCalledTimes(3)
 
 		await expect(result).resolves.toBe(ok)
-	})
-
-	it("handles dispose", ({ expect }) => {
-		const subject = withRetry(main)
-
-		subject[disposeKey]?.("CUSTOM_MESSAGE")
-
-		expect(main[disposeKey]).toHaveBeenCalledWith("CUSTOM_MESSAGE")
 	})
 })

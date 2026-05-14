@@ -1,3 +1,4 @@
+import type { RetryDelayFn } from "./types.js"
 import { delayMs } from "./util.js"
 
 /**
@@ -5,9 +6,6 @@ import { delayMs } from "./util.js"
  * Delay grows as 2^(attempt-2) seconds, capped at maxSeconds.
  *
  * The sequence is: 1s, 2s, 4s, 8s, 16s, 32s, etc.
- *
- * @param maxSeconds - Maximum delay in seconds before capping
- * @returns Function accepting attempt number and returning delay promise
  *
  * @example
  * ```ts
@@ -17,8 +15,8 @@ import { delayMs } from "./util.js"
  * await backoff(10) // waits 30 seconds (capped)
  * ```
  */
-export function useExponentialBackoff(maxSeconds: number) {
-	return function exponentialBackoff(attempt: number, signal?: AbortSignal) {
+export function useExponentialBackoff(maxSeconds: number): RetryDelayFn {
+	return function exponentialBackoff(attempt, signal) {
 		const num = Math.max(attempt - 2, 0)
 		const delay = Math.min(2 ** num, maxSeconds)
 		return delayMs(delay * 1_000, signal)
@@ -34,13 +32,10 @@ const binet = (n: number) =>
 	Math.round(((1 + sqrt5) ** n - (1 - sqrt5) ** n) / (2 ** n * sqrt5))
 
 /**
- * Creates a Fibonacci backoff strategy for retry delays.
- * Delay follows the Fibonacci sequence: 1s, 2s, 3s, 5s, 8s, 13s, etc.
+ * Creates a Fibonacci backoff strategy for retry delays. It is more gradual
+ * than exponential backoff, useful for more aggressive retry patterns.
  *
- * More gradual than exponential backoff, useful for less aggressive retry patterns.
- *
- * @param maxSeconds - Maximum delay in seconds before capping
- * @returns Function accepting attempt number and returning delay promise
+ * The sequence is: 1s, 2s, 3s, 5s, 8s, 13s, etc.
  *
  * @example
  * ```ts
@@ -50,8 +45,8 @@ const binet = (n: number) =>
  * await backoff(10) // waits 55 seconds
  * ```
  */
-export function useFibonacciBackoff(maxSeconds: number) {
-	return function fibonacciBackoff(attempt: number, signal?: AbortSignal) {
+export function useFibonacciBackoff(maxSeconds: number): RetryDelayFn {
+	return function fibonacciBackoff(attempt, signal) {
 		const delay = Math.min(binet(attempt), maxSeconds)
 		return delayMs(delay * 1_000, signal)
 	}

@@ -1,5 +1,5 @@
-import type { CircuitBreakerOptions } from "./types.js"
-import { assert, type AnyFn } from "./util.js"
+import type { AnyFn, CircuitBreakerOptions } from "./types.js"
+import { assert } from "./util.js"
 
 export function parseOptions<Fallback extends AnyFn>(
 	options: CircuitBreakerOptions<Fallback>,
@@ -14,6 +14,10 @@ export function parseOptions<Fallback extends AnyFn>(
 		onHalfOpen,
 		onOpen,
 		resetAfter = 30_000,
+		retryDelay = 0,
+		retryLimit = Infinity,
+		retryTest = () => true,
+		timeout = 0,
 	} = options
 
 	// errorIsFailure
@@ -74,6 +78,33 @@ export function parseOptions<Fallback extends AnyFn>(
 		`"resetAfter" must be greater than or equal to "errorWindow" (received ${resetAfter}, expected >= ${errorWindow})`,
 	)
 
+	// retryDelay
+	assert(
+		typeof retryDelay === "function" ||
+			(typeof retryDelay === "number" &&
+				retryDelay >= 0 &&
+				Number.isFinite(retryDelay)),
+		`"retryDelay" must be a function or a finite, non-negative number (received ${typeof retryDelay})`,
+	)
+
+	// retryLimit
+	assert(
+		typeof retryLimit === "number" && retryLimit >= 1,
+		`"retryLimit" must be greater than 0 (received ${retryLimit})`,
+	)
+
+	// retryTest
+	assert(
+		typeof retryTest === "function",
+		`"retryTest" must be a function (received ${typeof retryTest})`,
+	)
+
+	// timeout
+	assert(
+		Number.isFinite(timeout) && timeout >= 0,
+		`"timeout" must be a finite, non-negative number (received ${timeout})`,
+	)
+
 	return {
 		errorIsFailure,
 		errorThreshold,
@@ -84,5 +115,9 @@ export function parseOptions<Fallback extends AnyFn>(
 		onHalfOpen,
 		onOpen,
 		resetAfter,
+		retryDelay,
+		retryLimit,
+		retryTest,
+		timeout,
 	}
 }

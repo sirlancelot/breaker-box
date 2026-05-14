@@ -1,5 +1,5 @@
 import { type MainFn, type RetryOptions } from "./types.js"
-import { assert, abortable, createDisposable, disposeKey } from "./util.js"
+import { assert, abortable } from "./util.js"
 
 /**
  * Wrap a function with retry logic. Errors will be retried according to the
@@ -24,7 +24,7 @@ import { assert, abortable, createDisposable, disposeKey } from "./util.js"
 export function withRetry<Ret, Args extends readonly unknown[]>(
 	main: MainFn<Ret, Args>,
 	options: Readonly<RetryOptions> = {},
-): MainFn<Ret, Args> {
+): MainFn<Ret, Args> & Disposable {
 	const {
 		shouldRetry = () => true,
 		maxAttempts = 3,
@@ -57,6 +57,6 @@ export function withRetry<Ret, Args extends readonly unknown[]>(
 	}
 
 	return Object.assign(withRetryFunction, {
-		[disposeKey]: createDisposable(main, controller),
+		[Symbol.dispose]: () => controller.abort(),
 	})
 }
