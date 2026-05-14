@@ -1,5 +1,5 @@
 import { type MainFn } from "./types.js"
-import { abortable, createDisposable, disposeKey } from "./util.js"
+import { abortable } from "./util.js"
 
 /**
  * Wraps an async function with a timeout constraint. Rejects with an Error if
@@ -19,7 +19,7 @@ export function withTimeout<Ret, Args extends readonly unknown[]>(
 	main: MainFn<Ret, Args>,
 	timeoutMs: number,
 	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT",
-): MainFn<Ret, Args> {
+): MainFn<Ret, Args> & Disposable {
 	const error = new Error(timeoutMessage)
 	const controller = new AbortController()
 	const { signal } = controller
@@ -35,6 +35,6 @@ export function withTimeout<Ret, Args extends readonly unknown[]>(
 	}
 
 	return Object.assign(withTimeoutFunction, {
-		[disposeKey]: createDisposable(main, controller),
+		[Symbol.dispose]: () => controller.abort(),
 	})
 }

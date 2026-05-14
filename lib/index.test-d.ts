@@ -6,6 +6,7 @@ import {
 	type CircuitState,
 	type MainFn,
 	type RetryOptions,
+	type StateName,
 } from "./index.js"
 
 it("handles no arguments", () => {
@@ -89,4 +90,8 @@ it("exports types from main entry point", () => {
 	expectTypeOf<RetryOptions>().toHaveProperty("shouldRetry")
 	expectTypeOf<RetryOptions>().toHaveProperty("maxAttempts")
 	expectTypeOf<RetryOptions>().toHaveProperty("retryDelay")
+
+	expectTypeOf<StateName>().toEqualTypeOf<
+		"closed" | "open" | "halfOpen" | "disposed"
+	>()
 })

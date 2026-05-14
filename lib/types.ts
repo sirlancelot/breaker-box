@@ -1,4 +1,6 @@
-import { disposeKey, type AnyFn } from "./util"
+export type AnyFn = (...args: never[]) => unknown
+
+export type ErrorTest = (error: unknown) => boolean
 
 /**
  * The four possible states of a circuit breaker.
@@ -8,7 +10,7 @@ import { disposeKey, type AnyFn } from "./util"
  * - `halfOpen`: Testing recovery with a single trial call
  * - `disposed`: Terminal state, all calls rejected
  */
-export type CircuitState = "closed" | "halfOpen" | "open" | "disposed"
+export type StateName = "closed" | "halfOpen" | "open" | "disposed"
 
 /**
  * Configuration options for circuit breaker behavior.
@@ -17,11 +19,12 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	/**
 	 * Whether an error should be treated as non-retryable failure. When used and
 	 * when an error is considered a failure, the error will be thrown to the
-	 * caller.
+	 * caller and the request will *not* count tawards the error rate for circuit
+	 * breaker decisions.
 	 *
-	 * @default () => false // Errors are retryable by default
+	 * @default () => false // No errors are excluded
 	 */
-	errorIsFailure?: (error: unknown) => boolean
+	errorIsFailure?: ErrorTest
 
 	/**
 	 * The percentage of errors (as a number between 0 and 1) which must occur
@@ -39,8 +42,13 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	errorWindow?: number
 
 	/**
-	 * If provided, then all rejected calls to `main` will be forwarded to
-	 * this function instead.
+	 * If provided, then this function will be called instead of `main` when the
+	 * circuit is open. The fallback receives the same arguments as `main` and may
+	 * return a value or throw an error.
+	 *
+	 * When a fallback is used, the result of its evaluation is returned as-is for
+	 * the duration of the circuit's "open" state (until `resetAfter` milliseconds
+	 * have passed).
 	 *
 	 * @default undefined // No fallback, errors are propagated
 	 */
@@ -73,12 +81,49 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	onOpen?: (cause: unknown) => void
 
 	/**
-	 * The amount of time in milliseconds to wait before transitioning to a
-	 * half-open state.
+	 * The amount of time in milliseconds for the circuit breaker to remain in its
+	 * "open" state. After this time has passed, the circuit transitions to
+	 * "half-open" and allows up to `minimumCandidates` trial calls to determine
+	 * whether to close or to reopen.
 	 *
 	 * @default 30_000 // 30 seconds
 	 */
 	resetAfter?: number
+
+	/**
+	 * The delay between retry attempts. Can be a number (in milliseconds)
+	 * specifying a fixed delay, or a function returning a promise that resolves
+	 * when the next retry should occur.
+	 */
+	retryDelay?: number | RetryDelayFn
+
+	/**
+	 * The maximum number of attempts any call to `main` should be retried. The
+	 * last error is thrown if this limit is exceeded.
+	 *
+	 * @default Infinity // No retry limit
+	 */
+	retryLimit?: number
+
+	/**
+	 * A function that determines whether an error should be retried. When this
+	 * returns false, the error will be thrown immediately without retrying, but
+	 * the evaluation will still count towards the error rate for circuit breaker
+	 * decisions.
+	 *
+	 * @default () => true // All errors are retried by default
+	 */
+	retryTest?: ErrorTest
+
+	/**
+	 * If greater than zero, each call to `main` is raced against an
+	 * `AbortSignal.timeout` of this many milliseconds. When the timeout fires
+	 * first, the call rejects with the signal's reason and is counted as a
+	 * failure (subject to `errorIsFailure`).
+	 *
+	 * @default 0 // No per-call timeout
+	 */
+	timeout?: number
 }
 
 /**
@@ -88,13 +133,11 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 export interface CircuitBreakerProtectedFn<
 	Ret = unknown,
 	Args extends readonly unknown[] = readonly [],
-> {
+> extends Disposable {
 	(...args: Args): Promise<Ret>
 
 	/**
-	 * Free memory and stop timers. All future calls will be rejected with the
-	 * provided message.
-	 *
+	 * @deprecated Use `Symbol.dispose` or `using` keyword instead.
 	 * @default "ERR_CIRCUIT_BREAKER_DISPOSED"
 	 */
 	dispose(this: void, disposeMessage?: string): void
@@ -106,26 +149,13 @@ export interface CircuitBreakerProtectedFn<
 	getLatestError(this: void): unknown
 
 	/** Get the current state of the circuit breaker */
-	getState(this: void): CircuitState
-
-	/**
-	 * Dispose the circuit breaker using the explicit resource management
-	 * protocol. Equivalent to calling `dispose()` with no arguments.
-	 *
-	 * @example
-	 * ```ts
-	 * using protectedFn = createCircuitBreaker(main)
-	 * ```
-	 */
-	[Symbol.dispose](this: void): void
+	getState(this: void): StateName
 }
 
 /**
- * Tracks the status of a single call within the error window. Contains a timer
- * for automatic cleanup and the current resolution status.
+ * Tracks the status of a single call within the error window.
  */
 export interface HistoryEntry {
-	timer: NodeJS.Timeout | undefined
 	status: "pending" | "resolved" | "rejected"
 }
 
@@ -145,7 +175,11 @@ export interface MainFn<
 > {
 	(...args: Args): Promise<Ret>
 
-	[disposeKey]?: (disposeMessage?: string) => void
+	[Symbol.dispose]?: () => void
+}
+
+export interface RetryDelayFn {
+	(attempt: number, signal: AbortSignal): Promise<void>
 }
 
 /**
@@ -173,5 +207,5 @@ export interface RetryOptions {
 	 *
 	 * @default () => Promise.resolve() // Immediate retry
 	 */
-	retryDelay?: (attempt: number, signal: AbortSignal) => Promise<void>
+	retryDelay?: RetryDelayFn
 }

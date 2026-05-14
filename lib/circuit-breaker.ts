@@ -1,26 +1,66 @@
 import { parseOptions } from "./options.js"
-import {
-	type CircuitBreakerOptions,
-	type CircuitBreakerProtectedFn,
-	type CircuitState,
-	type HistoryEntry,
-	type HistoryMap,
-	type MainFn,
+import type {
+	CircuitBreakerOptions,
+	CircuitBreakerProtectedFn,
+	HistoryEntry,
+	HistoryMap,
+	MainFn,
+	StateName,
 } from "./types.js"
-import { assert, assertNever, disposeKey } from "./util.js"
+import {
+	abortable,
+	assert,
+	delayMs,
+	noop,
+	promiseTry,
+	shouldRetry,
+} from "./util.js"
 
-const validTransitions: Record<CircuitState, CircuitState[]> = {
+const validTransitions: Record<StateName, StateName[]> = {
 	closed: ["open", "disposed"],
 	open: ["halfOpen", "disposed"],
 	halfOpen: ["closed", "open", "disposed"],
 	disposed: [],
 }
 
-function assertTransition(from: CircuitState, to: CircuitState): void {
+function assertTransition(from: StateName, to: StateName): void {
 	assert(
 		validTransitions[from].includes(to),
 		`Invalid transition from ${from} to ${to}`,
 	)
+}
+
+interface CircuitInternalState<T extends StateName = StateName> {
+	controller: AbortController
+	failureCause: unknown
+	failureRate: number
+	history: HistoryMap
+	status: T
+}
+
+class CircuitError extends Error {
+	isTransient: boolean
+	constructor(
+		message: string,
+		options?: { cause?: unknown; isTransient?: boolean },
+	) {
+		super(`ERR_CIRCUIT_BREAKER_${message}`, options)
+		this.isTransient = options?.isTransient ?? false
+	}
+}
+
+function createState(
+	status: StateName,
+	failureCause?: unknown,
+): CircuitInternalState {
+	const controller = new AbortController()
+	return {
+		controller,
+		failureCause,
+		failureRate: 0,
+		history: new Map(),
+		status,
+	}
 }
 
 /**
@@ -31,13 +71,14 @@ function assertTransition(from: CircuitState, to: CircuitState): void {
  *
  * - `closed`: Normal operation, tracks failures in a sliding window
  * - `open`: Failed state, fallback is used until `resetAfter` milliseconds
- * - `halfOpen`: Testing recovery, allows one trial call
+ * - `halfOpen`: Testing recovery, allows trial calls
  * - `disposed`: Terminal state, all calls rejected
  *
  * When the failure rate exceeds `errorThreshold` within the `errorWindow`, the
  * circuit opens and rejects calls (using fallback if provided) for `resetAfter`
- * milliseconds. After this period, it transitions to half-open and allows one
- * trial call. Success closes the circuit; failure reopens it.
+ * milliseconds. After this period, it transitions to half-open and allows up
+ * to `minimumCandidates` concurrent trial calls. If their failure rate stays
+ * at or below the threshold, the circuit closes; otherwise it reopens.
  *
  * @example
  * ```ts
@@ -55,7 +96,7 @@ function assertTransition(from: CircuitState, to: CircuitState): void {
  * }
  *
  * console.log(protectedFn.getState()) // 'closed' | 'open' | 'halfOpen' | 'disposed'
- * protectedFn.dispose() // Clean up timers and resources
+ * protectedFn[Symbol.dispose]() // Clean up timers and resources
  * ```
  */
 export function createCircuitBreaker<Ret, Args extends unknown[]>(
@@ -66,32 +107,65 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		errorIsFailure,
 		errorThreshold,
 		errorWindow,
-		fallback: userFallback,
+		fallback,
 		minimumCandidates,
 		onClose,
 		onHalfOpen,
 		onOpen,
 		resetAfter,
+		retryDelay,
+		retryLimit,
+		retryTest,
+		timeout,
 	} = parseOptions(options)
-	const controller = new AbortController()
-	const history: HistoryMap = new Map()
-	const signal = controller.signal
-	let failureCause: unknown
-	let failureRate = 0
-	let fallback: typeof main =
-		userFallback ||
-		(() =>
-			Promise.reject(
-				new Error("ERR_CIRCUIT_BREAKER_OPEN", { cause: failureCause }),
-			))
-	let halfOpenPending: Promise<unknown> | undefined
-	let resetTimer: NodeJS.Timeout | undefined
-	let state: CircuitState = "closed"
+
+	let state = createState("closed")
+
+	async function tryCall(
+		current: CircuitInternalState,
+		args: Args,
+	): Promise<Ret> {
+		const { history } = current
+		const request = promiseTry(() => main(...args))
+
+		let historyItem: HistoryEntry | undefined = { status: "pending" }
+		history.set(request, historyItem)
+
+		try {
+			const result =
+				timeout > 0
+					? await abortable(AbortSignal.timeout(timeout), request)
+					: await request
+			historyItem.status = "resolved"
+			return result
+		} catch (cause) {
+			historyItem.status = "rejected"
+			// Drop this request if it's a transient error that shouldn't count
+			// towards the failure rate
+			const isTransient = errorIsFailure(cause)
+			if (isTransient) historyItem = undefined
+
+			// Wrap the error in a CircuitError to provide additional context and
+			// control flow handling.
+			throw new CircuitError("CALL_FAILURE", { cause, isTransient })
+		} finally {
+			// Remove the request if it was a transient failure, or if it's stale.
+			if (!historyItem || state !== current) history.delete(request)
+			// Keep the request in history until the end of the error window, or until
+			// the circuit transitions.
+			else {
+				const { signal } = current.controller
+				delayMs(errorWindow, signal)
+					.catch(() => {})
+					.finally(() => history.delete(request))
+			}
+		}
+	}
 
 	function calculateFailureRate(): number {
 		let failures = 0
 		let total = 0
-		for (const { status } of history.values()) {
+		for (const { status } of state.history.values()) {
 			if (status === "rejected") failures++
 			if (status !== "pending") total++
 		}
@@ -99,150 +173,138 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		return failures / total
 	}
 
-	function transition(
-		toState: CircuitState,
-		options: { cause?: unknown } = {},
-	): void {
-		assertTransition(state, toState)
-		state = toState
-
-		switch (toState) {
-			case "closed":
-				clearTimeout(resetTimer)
-				failureCause = undefined
-				resetTimer = undefined
-				if (onClose) setImmediate(onClose)
-				break
-
-			case "open":
-				clearTimeout(resetTimer)
-				failureCause = options.cause
-				resetTimer = setTimeout(() => transition("halfOpen"), resetAfter)
-				if (onOpen) setImmediate(onOpen, failureCause)
-				break
-
-			case "halfOpen":
-				halfOpenPending = undefined
-				if (onHalfOpen) setImmediate(onHalfOpen)
-				break
-
-			case "disposed":
-				failureCause = options.cause
-				assert(failureCause instanceof Error, "dispose cause must be an Error")
-				controller.abort(failureCause)
-				main[disposeKey]?.(failureCause.message)
-
-				history.forEach((entry) => clearTimeout(entry.timer))
-				history.clear()
-
-				halfOpenPending = undefined
-				failureRate = 0
-				fallback = undefined as never
-
-				clearTimeout(resetTimer)
-				resetTimer = undefined
-				break
-
-			default:
-				/* v8 ignore next -- @preserve */
-				assertNever(toState)
-		}
+	function transitionTo(
+		toStatus: StateName,
+		failureCause?: unknown,
+	): CircuitInternalState {
+		assertTransition(state.status, toStatus)
+		state.controller.abort()
+		return (state = createState(toStatus, failureCause))
 	}
 
-	function createHistoryItem<T>(pending: Promise<T>) {
-		const entry: HistoryEntry = { status: "pending", timer: undefined }
-		const teardown = (): void => {
-			clearTimeout(entry.timer)
-			history.delete(pending)
-			signal.removeEventListener("abort", teardown)
-		}
-		signal.addEventListener("abort", teardown, { once: true })
-		const settle = (value: "resolved" | "rejected"): number => {
-			if (signal.aborted) return 0
-			entry.status = value
-			entry.timer = setTimeout(teardown, errorWindow)
-			return calculateFailureRate()
-		}
-		history.set(pending, entry)
-		return { pending, settle, teardown }
+	async function transitionToOpen(error: CircuitError): Promise<void> {
+		// Race guard: a concurrent failure may have already changed state.
+		if (state.status !== "closed" && state.status !== "halfOpen") return
+
+		const cause = error.cause ?? error
+		const nextState = transitionTo("open", cause)
+		if (onOpen) setImmediate(onOpen, cause)
+
+		const { signal } = nextState.controller
+		await delayMs(resetAfter, signal)
+		if (state === nextState) transitionToHalfOpen()
 	}
 
-	function executeClosed(args: Args): Promise<Ret> {
-		const { pending, settle, teardown } = createHistoryItem(main(...args))
-		return pending.then(
-			(result) => {
-				failureRate = settle("resolved")
-				return result
-			},
-			(cause: unknown) => {
-				if (signal.aborted || errorIsFailure(cause)) {
-					teardown()
-					throw cause
-				}
+	function transitionToHalfOpen(): void {
+		transitionTo("halfOpen")
+		if (onHalfOpen) setImmediate(onHalfOpen)
+	}
 
-				failureRate = settle("rejected")
-				if (failureRate > errorThreshold) {
-					transition("open", { cause })
-				}
+	function transitionToClosed(): void {
+		transitionTo("closed")
+		if (onClose) setImmediate(onClose)
+	}
 
-				return fallback(...args)
-			},
+	function guardIsCurrent(
+		current: CircuitInternalState,
+		error: unknown,
+	): error is CircuitError {
+		if (!(error instanceof CircuitError)) throw error
+		// Transient errors shouldn't affect the circuit breaker's state. Re-throw
+		// the original cause of the error.
+		if (error.isTransient) throw error.cause
+
+		// If the circuit breaker was disposed mid-flight, surface the underlying
+		// cause of the in-flight call rather than the dispose error.
+		if (state.status === "disposed")
+			// eslint-disable-next-line @typescript-eslint/only-throw-error
+			throw error.cause ?? new CircuitError("DISPOSED")
+
+		// If the circuit breaker transitioned states, try again.
+		return state === current
+	}
+
+	async function protectedFn(...args: Args): Promise<Ret> {
+		let lastError: CircuitError | undefined
+		let retries = 0
+		do {
+			const current = state
+
+			// Closed: Normal Operation
+			if (current.status === "closed") {
+				try {
+					return await tryCall(current, args)
+				} catch (error) {
+					if (guardIsCurrent(current, error)) {
+						lastError = error
+						// Determine if the failure rate should open the circuit.
+						const rate = (current.failureRate = calculateFailureRate())
+						if (rate > errorThreshold) transitionToOpen(error).catch(noop)
+					}
+				}
+			}
+
+			// Half-Open: Execute trial calls until we have enough candidates.
+			else if (
+				current.status === "halfOpen" &&
+				current.history.size < minimumCandidates
+			) {
+				try {
+					return await tryCall(current, args)
+				} catch (error) {
+					if (guardIsCurrent(current, error)) lastError = error
+				} finally {
+					// Do nothing until we have enough candidates to make a decision.
+					if (state === current && current.history.size >= minimumCandidates) {
+						const rate = (current.failureRate = calculateFailureRate())
+						// Determine if the failure rate should re-open the circuit or
+						// if it is healthy enough to close it again.
+						if (rate > errorThreshold && lastError)
+							transitionToOpen(lastError).catch(noop)
+						else if (rate <= errorThreshold) transitionToClosed()
+					}
+				}
+			}
+
+			// Open: Skip calls and immediately return fallback if available.
+			else if (current.status === "open" || current.status === "halfOpen") {
+				if (!fallback) {
+					throw (
+						// eslint-disable-next-line @typescript-eslint/only-throw-error
+						current.failureCause ??
+						new CircuitError("OPEN", { cause: current.failureCause })
+					)
+				}
+				return await fallback(...args)
+			}
+
+			// Disposed: Reject all calls with dispose error.
+			else throw current.failureCause
+		} while (
+			await shouldRetry({
+				retries: ++retries,
+				lastError,
+				retryDelay,
+				retryLimit,
+				retryTest,
+				signal: state.controller.signal,
+			})
 		)
+		throw new Error("unknown error in circuit breaker retry logic")
 	}
 
-	function executeOpen(args: Args): Promise<Ret> {
-		return fallback(...args)
+	function dispose(disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED"): void {
+		if (state.status === "disposed") return
+		transitionTo("disposed", new ReferenceError(disposeMessage))
+		main[Symbol.dispose]?.()
 	}
 
-	function executeHalfOpen(args: Args): Promise<Ret> {
-		if (halfOpenPending) return fallback(...args)
+	const wrapped = protectedFn as CircuitBreakerProtectedFn<Ret, Args>
+	wrapped[Symbol.dispose] = () => dispose()
+	wrapped.dispose = dispose
+	wrapped.getFailureRate = () => state.failureRate
+	wrapped.getLatestError = () => state.failureCause
+	wrapped.getState = () => state.status
 
-		return (halfOpenPending = main(...args))
-			.finally(() => (halfOpenPending = undefined))
-			.then(
-				(result) => {
-					if (signal.aborted) return result
-					transition("closed")
-					return result
-				},
-				(cause: unknown) => {
-					if (signal.aborted || errorIsFailure(cause)) throw cause
-					transition("open", { cause })
-					return fallback(...args)
-				},
-			)
-	}
-
-	function executeDisposed(): Promise<never> {
-		return Promise.reject(failureCause)
-	}
-
-	function execute(...args: Args): Promise<Ret> {
-		switch (state) {
-			case "closed":
-				return executeClosed(args)
-			case "open":
-				return executeOpen(args)
-			case "halfOpen":
-				return executeHalfOpen(args)
-			case "disposed":
-				return executeDisposed()
-			default:
-				/* v8 ignore next -- @preserve */
-				return assertNever(state)
-		}
-	}
-
-	const dispose = (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
-		if (state === "disposed") return
-		transition("disposed", { cause: new ReferenceError(disposeMessage) })
-	}
-
-	return Object.assign(execute, {
-		dispose,
-		getFailureRate: () => failureRate,
-		getLatestError: () => failureCause,
-		getState: () => state,
-		[Symbol.dispose]: () => dispose(),
-	})
+	return wrapped
 }

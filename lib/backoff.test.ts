@@ -1,15 +1,16 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { useExponentialBackoff, useFibonacciBackoff } from "./backoff.js"
 
 const errorOk = new Error("ok")
 
-beforeEach(() => {
+beforeEach(({ onTestFinished }) => {
 	vi.useFakeTimers()
-})
 
-afterEach(() => {
-	expect(vi.getTimerCount()).toBe(0)
-	vi.resetAllMocks()
+	onTestFinished(() => {
+		vi.runAllTimers()
+		expect(vi.getTimerCount()).toBe(0)
+		vi.resetAllMocks()
+	})
 })
 
 describe("useExponentialBackoff", () => {

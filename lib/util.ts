@@ -1,42 +1,29 @@
-export type AnyFn = (...args: never) => unknown
+import type { AnyFn, RetryDelayFn } from "./types.js"
 
 /**
- * Symbol key for internal disposal protocol. Functions implementing this key
- * can be disposed by circuit breaker wrappers.
+ * Returns a promise which rejects when the abort signal is triggered or
+ * resolves when the promise is fulfilled.
  */
-export const disposeKey = Symbol("disposeKey")
+export const abortable = <T>(
+	signal: AbortSignal,
+	pending: PromiseLike<T>,
+): Promise<T> =>
+	new Promise((resolve, reject) => {
+		signal.throwIfAborted()
+
+		const onAbort = () => reject(signal.reason)
+		signal.addEventListener("abort", onAbort, { once: true })
+
+		Promise.resolve(pending)
+			.finally(() => signal.removeEventListener("abort", onAbort))
+			.then(resolve, reject)
+	})
 
 /**
  * Asserts that the given value is truthy. If not, throws a `TypeError`.
  */
 export function assert(value: unknown, message?: string): asserts value {
 	if (!value) throw new TypeError(message)
-}
-
-/**
- * Creates a dispose handler for wrapped functions. Used by timeout and retry
- * wrappers to propagate disposal through composed wrappers.
- */
-export function createDisposable(
-	main: { [disposeKey]?: (message?: string) => void },
-	controller: AbortController,
-) {
-	return (disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED") => {
-		const reason = new ReferenceError(disposeMessage)
-		main[disposeKey]?.(disposeMessage)
-		controller.abort(reason)
-	}
-}
-
-/**
- * `[TypeScript]` For exhaustive checks in switch statements or if/else. Add
- * this check to `default` case or final `else` to ensure all possible values
- * have been handled. If a new value is added to the type, TypeScript will
- * throw an error and the editor will underline the `value`.
- */
-/* v8 ignore next -- @preserve */
-export const assertNever = (val: never, msg = "Unexpected value"): never => {
-	throw new TypeError(`${msg}: ${val as string}`)
 }
 
 /**
@@ -68,21 +55,57 @@ export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> => {
 		: new Promise((next) => setTimeout(next, ms))
 }
 
+export const deprecated = <T extends AnyFn>(
+	fn: T,
+	method: string,
+	message: string,
+): T => {
+	let warned = false
+	return ((...args) => {
+		if (!warned) {
+			console.warn(`[breaker-box] ${method} Deprecation: ${message}`)
+			warned = true
+		}
+		return fn(...args)
+	}) as T
+}
+
+export const identity = <T>(value: T): T => value
+
+export const noop: (...args: unknown[]) => void = () => {}
+
 /**
- * Returns a promise which rejects when the abort signal is triggered or
- * resolves when the promise is fulfilled.
+ * Polyfill for `Promise.try()`
  */
-export const abortable = <T>(
-	signal: AbortSignal,
-	pending: PromiseLike<T>,
-): Promise<T> =>
-	new Promise((resolve, reject) => {
-		signal.throwIfAborted()
+export function promiseTry<T>(fn: () => T): Promise<T> {
+	try {
+		return Promise.resolve(fn())
+	} catch (error) {
+		return Promise.reject(error)
+	}
+}
 
-		const onAbort = () => reject(signal.reason)
-		signal.addEventListener("abort", onAbort, { once: true })
+export async function shouldRetry(options: {
+	retries: number
+	lastError: unknown
+	retryDelay: number | RetryDelayFn
+	retryLimit: number
+	retryTest: (error: unknown) => boolean
+	signal: AbortSignal
+}): Promise<true> {
+	const { retries, lastError, retryDelay, retryLimit, retryTest, signal } =
+		options
 
-		Promise.resolve(pending)
-			.then(resolve, reject)
-			.finally(() => signal.removeEventListener("abort", onAbort))
-	})
+	if (retries >= retryLimit) throw lastError
+	if (!retryTest(lastError)) throw lastError
+
+	try {
+		if (!retryDelay) return true
+		else if (typeof retryDelay === "number") await delayMs(retryDelay, signal)
+		else if (typeof retryDelay === "function") await retryDelay(retries, signal)
+	} catch {
+		/* empty */
+	}
+
+	return true
+}

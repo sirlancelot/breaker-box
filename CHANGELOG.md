@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.0.0] - 2026-05-14
+
+### Added
+
+- `timeout` option on `createCircuitBreaker` for per-call timeouts via `AbortSignal.timeout`, replacing the need for `withTimeout` composition
+- Built-in retry support on `createCircuitBreaker` via `retryLimit`, `retryDelay`, and `retryTest` options
+- `StateName` type export (replaces `CircuitState`)
+- `withRetry` and `withTimeout` return types now include `Disposable`
+
+### Changed
+
+- **BREAKING**: `CircuitState` type renamed to `StateName` — a deprecated `CircuitName` alias is provided but code importing `CircuitState` must update
+- **BREAKING**: `MainFn` now uses `[Symbol.dispose]` for disposal chaining instead of `[disposeKey]`
+- **BREAKING**: Open circuit without a fallback now re-throws the original failure cause directly instead of wrapping it in `Error("ERR_CIRCUIT_BREAKER_OPEN")`
+- **BREAKING**: Half-open state now allows up to `minimumCandidates` concurrent trial calls and evaluates their aggregate failure rate, instead of gating on a single trial call
+
+### Deprecated
+
+- `withRetry` wrapper — use the `retryLimit`, `retryDelay`, and `retryTest` options on `createCircuitBreaker` instead
+- `withTimeout` wrapper — use the `timeout` option on `createCircuitBreaker` instead
+- `dispose()` method on protected functions — use `Symbol.dispose` / `using` keyword instead
+- `CircuitState` type — exported as `CircuitName` alias, use `StateName` instead
+
+### Fixed
+
+- Concurrent inflight failures now open the circuit only once
+
 ## [7.0.0] - 2026-05-07
 
 ### Added
@@ -50,7 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...HEAD
+[8.0.0]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...v8.0.0
 [7.0.0]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...v7.0.0
 [6.0.0]: https://github.com/sirlancelot/breaker-box/compare/v5.0.0...v6.0.0
 [5.0.0]: https://github.com/sirlancelot/breaker-box/releases/tag/v5.0.0

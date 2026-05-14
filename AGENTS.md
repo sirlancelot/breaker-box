@@ -2,42 +2,42 @@
 
 ## Project Overview
 
-Zero-dependency circuit breaker library for Node.js. Provides `createCircuitBreaker`, `withRetry`, and `withTimeout` composable wrappers for fault-tolerant async operations.
+Zero-dependency circuit breaker library for Node.js. Provides `createCircuitBreaker` with built-in retry, timeout, and fallback support for fault-tolerant async operations.
 
 ## Architecture
 
 ```text
 lib/
-├── index.ts           # Pure re-export module defining public API surface
+├── index.ts           # Public API surface with deprecation wrappers for withRetry and withTimeout
 ├── circuit-breaker.ts # Main createCircuitBreaker implementation
 ├── retry.ts           # withRetry wrapper with retry logic
 ├── timeout.ts         # withTimeout wrapper with timeout constraint
 ├── backoff.ts         # Backoff strategies (useExponentialBackoff, useFibonacciBackoff)
 ├── options.ts         # Option parsing with validation via assert()
 ├── types.ts           # TypeScript interfaces, JSDoc for public API
-└── util.ts            # Shared utilities (disposeKey, assert, assertNever, delayMs, abortable, createDisposable)
+└── util.ts            # Shared utilities (assert, abortable, delayMs, deprecated, identity, noop, promiseTry, shouldRetry)
 ```
 
 **Key patterns:**
 
-- Functions return wrapped functions with attached methods (`.dispose()`, `.getState()`, `.getFailureRate()`, `.getLatestError()`)
-- `disposeKey` symbol enables chained disposal through composed wrappers—each wrapper calls `main[disposeKey]?.()` when disposed
+- Functions return wrapped functions with attached methods (`[Symbol.dispose]()`, `.getState()`, `.getFailureRate()`, `.getLatestError()`)
+- `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
 - History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`
-- Composition order matters: `createCircuitBreaker(withRetry(withTimeout(fn)))` — timeout innermost, circuit breaker outermost
+- Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`); `withRetry` and `withTimeout` wrappers are deprecated
 
 **Circuit Breaker FSM:**
 
 - Four states: `closed`, `open`, `halfOpen`, `disposed`
 - Validated state transitions via `validTransitions` map prevent invalid state changes
-- Centralized state transitions through `transition()` function with cleanup per state
+- State transitions via `transitionTo()` with per-transition helpers (`transitionToOpen`, `transitionToHalfOpen`, `transitionToClosed`)
 - `disposed` is a terminal state—once disposed, no transitions are allowed
 - Valid transitions:
   - `closed` → `open` (failure threshold exceeded) or `disposed`
   - `open` → `halfOpen` (after resetAfter timer) or `disposed`
-  - `halfOpen` → `closed` (trial success), `open` (trial failure), or `disposed`
+  - `halfOpen` → `closed` (aggregate failure rate at or below threshold), `open` (aggregate failure rate exceeds threshold), or `disposed`
   - `disposed` → none (terminal state)
-- All cleanup logic (timers, history, pending promises) centralized in state transition handlers
+- Cleanup coordinated via AbortController—each state transition aborts the previous state's controller
 
 **Option constraints (validated in `options.ts`):**
 
@@ -45,6 +45,10 @@ lib/
 - `errorWindow`: minimum 1000ms
 - `resetAfter`: minimum 1000ms and must be `>= errorWindow`
 - `minimumCandidates`: minimum 1
+- `retryDelay`: non-negative finite number or function
+- `retryLimit`: minimum 1
+- `retryTest`: must be a function
+- `timeout`: non-negative finite number
 
 ## Development Commands
 
@@ -66,10 +70,7 @@ lib/
 - **Timer cleanup assertion**: `afterEach` verifies `vi.getTimerCount() === 0` — ensures no timer leaks
 - **vitest-when** for conditional mocking: `when(main).calledWith("arg").thenResolve(value)`
 - **Parameterized tests**: Use `it.for([...])` for testing multiple inputs (see backoff tests)
-- **disposeKey mocking**: Mock functions need `[disposeKey]: vi.fn()` for disposal tests:
-  ```ts
-  const main = Object.assign(vi.fn(), { [disposeKey]: vi.fn() })
-  ```
+- **Plain mocks**: Circuit breaker tests use plain `vi.fn()` mocks; disposal chaining uses `Symbol.dispose`
 - **Inline snapshots**: Use `.toMatchInlineSnapshot()` for value assertions with complex shapes and `.toThrowErrorMatchingInlineSnapshot()` for error message assertions
 - **Co-located tests**: `*.test.ts` alongside implementation files
 - **Type-level tests**: `lib/index.test-d.ts` uses `expectTypeOf` to assert public API shapes
@@ -79,10 +80,15 @@ lib/
 - **Imports**: Use `.js` extension in imports (e.g., `./types.js`) for ESM compatibility
 - **No comments**: Keep code self-documenting; JSDoc only for public API in `types.ts`
 - **Assertions**: Use `assert()` from util.ts for runtime validation with descriptive messages
-- **Exhaustive checks**: Use `assertNever()` for switch/if-else exhaustiveness (see `circuit-breaker.ts`)
-- **Error messages**: Prefix with `ERR_CIRCUIT_BREAKER_*` (e.g., `ERR_CIRCUIT_BREAKER_DISPOSED`, `ERR_CIRCUIT_BREAKER_TIMEOUT`, `ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS`)
+- **Error messages**: Prefix with `ERR_CIRCUIT_BREAKER_*` (e.g., `ERR_CIRCUIT_BREAKER_DISPOSED`, `ERR_CIRCUIT_BREAKER_TIMEOUT`, `ERR_CIRCUIT_BREAKER_CALL_FAILURE`, `ERR_CIRCUIT_BREAKER_OPEN`)
 - **v8 ignore**: Use `/* v8 ignore next */` for unreachable code paths in coverage
 - **Type definitions**: All public interface types are defined in `types.ts` with JSDoc
+
+## Release Process
+
+See [`.agents-docs/release.md`](.agents-docs/release.md) for the full release checklist.
+
+**Summary:** git-flow model (`develop` + `master`). Finalize CHANGELOG on `develop`, merge to `master`, `npm version <major|minor|patch>`, push with tags, merge back to `develop`, `npm publish`. No CI/CD — manual process. `prepublishOnly` runs tests + build automatically.
 
 ## Build Output
 

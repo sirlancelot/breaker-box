@@ -43,58 +43,39 @@ try {
 
 The above example creates a function named `protectedApiCall` which, when called will execute the `unreliableApiCall` function with circuit breaker protection. If the underlying function fails, then `fallback` is called instead. If **50%** of the calls fail within a **10-second sliding window**, then the circuit breaker will open and subsequent calls to `protectedApiCall` will **always** use the `fallback` for the next **30 seconds**.
 
-## Composition Helpers
+## Timeout & Retry
 
-The circuit breaker function doesn't handle timeouts, retries, or cooldowns on
-its own. For these features, you need to compose with other helper functions.
-`breaker-box` provides a set of composable functions that can wrap your API call
-with these features.
+`createCircuitBreaker` supports built-in timeout and retry via options:
 
 ### Timeouts
 
-Wrap the `unreliableApiCall` with a timeout using `withTimeout()`. If the timer
-expires before the call completes, then the promise will reject with
-`ERR_CIRCUIT_BREAKER_TIMEOUT`.
-
-This wrapping may not be needed if your API call supports a timeout option
-already (e.g. `axios` already has a `timeout` option).
+If the call doesn't complete within `timeout` milliseconds, it rejects and counts as a failure.
 
 ```typescript
-import { createCircuitBreaker, withTimeout } from "breaker-box"
-
-const protectedApiCall = createCircuitBreaker(
-	withTimeout(unreliableApiCall, 5000),
-)
+const protectedApiCall = createCircuitBreaker(unreliableApiCall, {
+	timeout: 5000,
+})
 ```
 
 ### Retries
 
-Wrap the `unreliableApiCall` with retry logic using `withRetry()` function. If
-the promise gets rejected, it will be retried up to a certain number of times.
-Once the max number of retries is reached, then the promise will ultimately
-reject with `ERR_CIRCUIT_BREAKER_MAX_ATTEMPTS (${number})`.
-
-This wrapping may not be needed if your API call supports a retry option already
-(e.g. `aws-sdk` already has retry logic).
+Failed calls can be retried automatically. Use `retryLimit` to set the maximum
+number of attempts, `retryTest` to filter which errors are retryable, and
+`retryDelay` to control the delay between attempts.
 
 ```typescript
-import { createCircuitBreaker, withRetry } from "breaker-box"
-
-const protectedApiCall = createCircuitBreaker(
-	withRetry(unreliableApiCall, {
-		maxAttempts: 3,
-		shouldRetry: (error) => true, // Check whether error is retryable
-	}),
-)
+const protectedApiCall = createCircuitBreaker(unreliableApiCall, {
+	retryLimit: 3,
+	retryTest: (error) => error.statusCode !== 404,
+	retryDelay: useExponentialBackoff(60),
+})
 ```
 
 ### Cooldowns
 
-When using retry logic, it may be necessary to introduce a cooldown period
-between retries to prevent overwhelming the remote system. By default,
-`withRetry` will retry immediately. However, you can provide a custom
-`retryDelay` function to introduce a delay before each retry attempt. The
-function should return a promise that resolves after the desired delay.
+When using retry logic, you can introduce a delay between retries to avoid
+overwhelming the remote system. The `retryDelay` option accepts either a number
+(fixed delay in milliseconds) or a function returning a promise.
 
 `breaker-box` offers helper functions to generate retry delays:
 
@@ -102,7 +83,6 @@ function should return a promise that resolves after the desired delay.
   number of milliseconds.
 - `useExponentialBackoff(maxSeconds: number)`: Returns a function that
   calculates the delay using exponential backoff.
-
 - `useFibonacciBackoff(maxSeconds: number)`: Returns a function that calculates
   the delay using Fibonacci sequence.
 
@@ -112,49 +92,39 @@ import {
 	delayMs,
 	useExponentialBackoff,
 	useFibonacciBackoff,
-	withRetry,
 } from "breaker-box"
 
-const protectedApiCall1 = createCircuitBreaker(
-	withRetry(unreliableApiCall, {
-		maxAttempts: 3,
-		retryDelay: (attempt, signal) => delayMs(1_000, signal),
-	}),
-)
+const protectedApiCall1 = createCircuitBreaker(unreliableApiCall, {
+	retryLimit: 3,
+	retryDelay: 1_000, // Fixed 1-second delay
+})
 
-const protectedApiCall2 = createCircuitBreaker(
-	withRetry(unreliableApiCall, {
-		maxAttempts: 3,
-		retryDelay: useExponentialBackoff(60),
-	}),
-)
+const protectedApiCall2 = createCircuitBreaker(unreliableApiCall, {
+	retryLimit: 3,
+	retryDelay: useExponentialBackoff(60),
+})
 
-const protectedApiCall3 = createCircuitBreaker(
-	withRetry(unreliableApiCall, {
-		maxAttempts: 3,
-		retryDelay: useFibonacciBackoff(60),
-	}),
-)
+const protectedApiCall3 = createCircuitBreaker(unreliableApiCall, {
+	retryLimit: 3,
+	retryDelay: useFibonacciBackoff(60),
+})
 ```
 
 ### Complete Example
 
-The optimal composition should look like this: Circuit Breaker -> Retry -> Timeout -> Implementation. However, you may compose it in any order you prefer as long as you understand the behavior.
-
 ```typescript
-import {
-	createCircuitBreaker,
-	useExponentialBackoff,
-	withRetry,
-	withTimeout,
-} from "breaker-box"
+import { createCircuitBreaker, useExponentialBackoff } from "breaker-box"
 
-const protectedApiCall = createCircuitBreaker(
-	withRetry(withTimeout(unreliableApiCall, 4_000), {
-		maxAttempts: 3,
-		retryDelay: useExponentialBackoff(60),
-	}),
-)
+const protectedApiCall = createCircuitBreaker(unreliableApiCall, {
+	errorThreshold: 0.5,
+	errorWindow: 10_000,
+	minimumCandidates: 1,
+	resetAfter: 30_000,
+	timeout: 4_000,
+	retryLimit: 3,
+	retryDelay: useExponentialBackoff(60),
+	fallback: (data) => ({ data: "fallback data" }),
+})
 ```
 
 ## Observability
@@ -178,7 +148,7 @@ const protectedFunction = createCircuitBreaker(unreliableApiCall, {
 The following methods can retrieve information about the circuit breaker:
 
 ```typescript
-// Check current state: "closed", "open", "halfOpen"
+// Check current state: "closed", "open", "halfOpen", "disposed"
 console.log("Current state:", protectedFunction.getState())
 
 // Check failure rate: Number between 0 and 1
@@ -191,7 +161,14 @@ console.log("Last error:", protectedFunction.getLatestError())
 ## Cleanup
 
 ```typescript
-// Clean up resources when shutting down
+// Preferred: use explicit resource management
+{
+	using protectedFunction = createCircuitBreaker(unreliableApiCall)
+	// automatically disposed at end of block
+}
+
+// Or dispose manually (deprecated)
+const protectedFunction = createCircuitBreaker(unreliableApiCall)
 protectedFunction.dispose()
 ```
 
@@ -214,19 +191,26 @@ Creates a circuit breaker around the provided async function.
   - `onHalfOpen`: Function called when circuit enters half-open state (default: undefined)
   - `onOpen`: Function called when circuit opens (default: undefined)
   - `resetAfter`: Milliseconds to wait before trying half-open (default: `30_000`)
+  - `retryDelay`: Delay between retries; a number (ms) for fixed delay or a function `(attempt, signal) => Promise<void>` (default: `0`)
+  - `retryLimit`: Maximum number of attempts per call (default: `Infinity`)
+  - `retryTest`: Function `(error) => boolean` to decide if an error is retryable (default: `() => true`)
+  - `timeout`: Per-call timeout in milliseconds; 0 disables (default: `0`)
 
 #### Returns
 
 A function with the same signature as `fn` and additional methods:
 
-- `.dispose(message?)`: Clean up resources and reject future calls
+- `.dispose(message?)`: *(Deprecated)* Clean up resources and reject future calls. Use `Symbol.dispose` / `using` keyword instead.
 - `.getFailureRate()`: Returns the current failure rate (0-1) or 0 if fewer than `minimumCandidates` calls have been made
 - `.getLatestError()`: Returns the error which triggered the circuit breaker
-- `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`)
+- `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`)
+- `[Symbol.dispose]()`: Clean up resources and reject future calls. Supports `using` syntax.
 
 ### Helper Functions
 
-#### `withRetry(fn, options?)`
+#### `withRetry(fn, options?)` *(Deprecated)*
+
+> **Deprecated:** Use the `retryLimit`, `retryDelay`, and `retryTest` options on `createCircuitBreaker` instead.
 
 Wraps a function with retry logic. Failures will be retried according to the provided options.
 
@@ -248,7 +232,9 @@ const retryCall = withRetry(apiCall, {
 })
 ```
 
-#### `withTimeout(fn, timeoutMs, message?)`
+#### `withTimeout(fn, timeoutMs, message?)` *(Deprecated)*
+
+> **Deprecated:** Use the `timeout` option on `createCircuitBreaker` instead.
 
 Wraps a function with a timeout. Rejects with `Error(message)` if execution exceeds `timeoutMs`.
 
@@ -296,8 +282,9 @@ Returns a promise that resolves after the specified number of milliseconds. Supp
 | `npm run build`             | Build with pkgroll (CJS + ESM + types) |
 | `npm run dev`               | Run tests in watch mode (vitest)       |
 | `npm run format`            | Format with Prettier                   |
+| `npm run lint`              | Lint with ESLint (auto-fix)            |
 | `npm run test:coverage`     | Run tests with coverage                |
-| `npm test`                  | Run tests once                         |
+| `npm test`                  | Run tests once (includes typecheck)    |
 | `npx tsc --noEmit`          | Type-check without emit                |
 | `npx vitest index.test.ts`  | Run single test file                   |
 | `npx vitest -t "test name"` | Run specific test by name              |
