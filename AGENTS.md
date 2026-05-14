@@ -84,6 +84,12 @@ lib/
 - **v8 ignore**: Use `/* v8 ignore next */` for unreachable code paths in coverage
 - **Type definitions**: All public interface types are defined in `types.ts` with JSDoc
 
+## Release Process
+
+See [`.agents-docs/release.md`](.agents-docs/release.md) for the full release checklist.
+
+**Summary:** git-flow model (`develop` + `master`). Finalize CHANGELOG on `develop`, merge to `master`, `npm version <major|minor|patch>`, push with tags, merge back to `develop`, `npm publish`. No CI/CD — manual process. `prepublishOnly` runs tests + build automatically.
+
 ## Build Output
 
 Dual CJS/ESM package via pkgroll:
