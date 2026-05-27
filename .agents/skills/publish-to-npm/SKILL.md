@@ -1,3 +1,9 @@
+---
+name: publish-to-npm
+description: "Publish to NPM"
+disable-model-invocation: true
+---
+
 # Release Process
 
 This project follows a **git-flow** branching model with `develop` for active work and `master` for releases. Releases are published to npm manually — there is no CI/CD automation.
@@ -22,11 +28,9 @@ Before starting a release, verify:
 
 > **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically — no need to run these manually.
 
-## Release Checklist
+## Release Steps
 
-Run all commands from the repository root.
-
-### 1. Finalize CHANGELOG on `develop`
+Before running the script:
 
 1. Move items from `[Unreleased]` into a new version section: `## [X.Y.Z] - YYYY-MM-DD`
 2. Leave an empty `## [Unreleased]` section at the top
@@ -34,46 +38,33 @@ Run all commands from the repository root.
 4. Update the `[unreleased]` link to compare against the new tag: `[unreleased]: https://github.com/sirlancelot/breaker-box/compare/vX.Y.Z...HEAD`
 5. Commit: `git commit -am "Update changelog for vX.Y.Z"`
 
-### 2. Merge `develop` into `master`
+Then run the following script, replacing `<major|minor|patch>` with the appropriate bump level:
 
-```
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BUMP="${1:?Usage: release.sh <major|minor|patch>}"
+
+# Merge develop into master
 git checkout master
 git merge --no-ff develop
-```
 
-### 3. Bump version on `master`
+# Bump version (creates commit + annotated tag)
+npm version "$BUMP"
 
-```
-npm version <major|minor|patch>
-```
-
-This single command:
-
-- Updates `version` in `package.json` and `package-lock.json`
-- Creates a commit with the version number as the message (e.g., `7.0.0`)
-- Creates an annotated git tag `vX.Y.Z`
-
-### 4. Push `master` and tags
-
-```
+# Push master and tags
 git push origin master --follow-tags
-```
 
-### 5. Merge `master` back to `develop`
+# Authenticate and publish
+npm login
+npm publish
 
-```
+# Merge master back to develop
 git checkout develop
 git merge --no-ff master
 git push origin develop
 ```
-
-### 6. Publish to npm
-
-```
-npm publish
-```
-
-The `prepublishOnly` script automatically runs `npm run test && npm run build` before publishing.
 
 ## Post-Release Verification
 
