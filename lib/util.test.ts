@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { abortable, delayMs, shouldRetry } from "./util.js"
+import { CircuitError, abortable, delayMs, shouldContinue } from "./util.js"
 
 const errorOk = new Error("ok")
 
@@ -80,9 +80,9 @@ describe("delayMs", () => {
 	})
 })
 
-describe("shouldRetry", () => {
+describe("shouldContinue", () => {
 	const defaults = {
-		lastError: new Error("fail"),
+		lastError: new CircuitError("CALL_FAILURE", { cause: new Error("fail") }),
 		retryDelay: 0,
 		retryLimit: 3,
 		retryTest: () => true,
@@ -92,32 +92,54 @@ describe("shouldRetry", () => {
 	it("returns true when retries < retryLimit and retryTest passes", async ({
 		expect,
 	}) => {
-		const result = shouldRetry({ ...defaults, retries: 1 })
+		const result = shouldContinue({ ...defaults, retries: 1 })
 		await expect(result).resolves.toBe(true)
 	})
 
 	it("throws lastError when retries >= retryLimit", async ({ expect }) => {
 		const error = new Error("limit reached")
+
 		await expect(
-			shouldRetry({ ...defaults, retries: 3, retryLimit: 3, lastError: error }),
-		).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: limit reached]`)
+			shouldContinue({
+				...defaults,
+				retries: 3,
+				retryLimit: 3,
+				lastError: error,
+			}),
+		).rejects.toMatchObject({
+			message: "ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+			cause: error,
+		})
 	})
 
 	it("throws lastError when retryTest returns false", async ({ expect }) => {
-		const error = new Error("not retryable")
+		const lastError = new Error("ok")
+
 		await expect(
-			shouldRetry({
+			shouldContinue({
 				...defaults,
 				retries: 0,
-				lastError: error,
+				lastError,
 				retryTest: () => false,
 			}),
-		).rejects.toThrowErrorMatchingInlineSnapshot(`[Error: not retryable]`)
+		).rejects.toMatchObject({
+			message: "ERR_CIRCUIT_BREAKER_NON_RETRYABLE",
+			cause: lastError,
+		})
+	})
+
+	it("passes the cause to retryTest", async ({ expect }) => {
+		const lastError = new TypeError("original")
+		const retryTest = vi.fn(() => true)
+
+		await shouldContinue({ ...defaults, retries: 0, lastError, retryTest })
+
+		expect(retryTest).toHaveBeenCalledWith(lastError)
 	})
 
 	it("delays with numeric retryDelay", async ({ expect }) => {
 		const controller = new AbortController()
-		const result = shouldRetry({
+		const result = shouldContinue({
 			...defaults,
 			retries: 0,
 			retryDelay: 500,
@@ -132,7 +154,7 @@ describe("shouldRetry", () => {
 		const retryDelay = vi.fn((_attempt: number, signal?: AbortSignal) =>
 			delayMs(100, signal),
 		)
-		const result = shouldRetry({
+		const result = shouldContinue({
 			...defaults,
 			retries: 2,
 			retryDelay,
@@ -145,7 +167,7 @@ describe("shouldRetry", () => {
 
 	it("continues when signal is aborted", async ({ expect }) => {
 		const controller = new AbortController()
-		const result = shouldRetry({
+		const result = shouldContinue({
 			...defaults,
 			retries: 0,
 			retryDelay: 500,

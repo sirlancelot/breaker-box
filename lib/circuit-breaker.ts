@@ -8,12 +8,13 @@ import type {
 	StateName,
 } from "./types.js"
 import {
+	CircuitError,
 	abortable,
 	assert,
 	delayMs,
 	noop,
 	promiseTry,
-	shouldRetry,
+	shouldContinue,
 } from "./util.js"
 
 const validTransitions: Record<StateName, StateName[]> = {
@@ -36,17 +37,6 @@ interface CircuitInternalState<T extends StateName = StateName> {
 	failureRate: number
 	history: HistoryMap
 	status: T
-}
-
-class CircuitError extends Error {
-	isTransient: boolean
-	constructor(
-		message: string,
-		options?: { cause?: unknown; isTransient?: boolean },
-	) {
-		super(`ERR_CIRCUIT_BREAKER_${message}`, options)
-		this.isTransient = options?.isTransient ?? false
-	}
 }
 
 function createState(
@@ -196,7 +186,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	}
 
 	function transitionToHalfOpen(): void {
-		transitionTo("halfOpen")
+		transitionTo("halfOpen", state.failureCause)
 		if (onHalfOpen) setImmediate(onHalfOpen)
 	}
 
@@ -229,6 +219,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		let retries = 0
 		do {
 			const current = state
+			lastError = undefined
 
 			// Closed: Normal Operation
 			if (current.status === "closed") {
@@ -253,6 +244,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					return await tryCall(current, args)
 				} catch (error) {
 					if (guardIsCurrent(current, error)) lastError = error
+					break
 				} finally {
 					// Do nothing until we have enough candidates to make a decision.
 					if (state === current && current.history.size >= minimumCandidates) {
@@ -268,29 +260,27 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 			// Open: Skip calls and immediately return fallback if available.
 			else if (current.status === "open" || current.status === "halfOpen") {
-				if (!fallback) {
-					throw (
-						// eslint-disable-next-line @typescript-eslint/only-throw-error
-						current.failureCause ??
-						new CircuitError("OPEN", { cause: current.failureCause })
-					)
-				}
-				return await fallback(...args)
+				break
 			}
 
 			// Disposed: Reject all calls with dispose error.
 			else throw current.failureCause
 		} while (
-			await shouldRetry({
+			await shouldContinue({
 				retries: ++retries,
-				lastError,
+				lastError: lastError?.cause ?? lastError,
 				retryDelay,
 				retryLimit,
 				retryTest,
 				signal: state.controller.signal,
+			}).catch((error: CircuitError) => {
+				lastError = error
+				return false
 			})
 		)
-		throw new Error("unknown error in circuit breaker retry logic")
+
+		if (!fallback) throw lastError ?? state.failureCause
+		return fallback(...args)
 	}
 
 	function dispose(disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED"): void {

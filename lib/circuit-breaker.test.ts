@@ -231,9 +231,7 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 it("default fallback rejects with an Error when main rejects with a non-Error", async ({
 	expect,
 }) => {
-	when(main)
-		.calledWith("bad")
-		.thenReject(undefined as never)
+	when(main).calledWith("bad").thenReject(undefined)
 	using protectedFn = createCircuitBreaker(main, { minimumCandidates: 1 })
 
 	// executeClosed: main rejects with undefined, threshold exceeded, opens circuit, calls fallback
@@ -326,9 +324,10 @@ it("stops retrying after retryLimit is exceeded", async ({ expect }) => {
 		minimumCandidates: 10,
 	})
 
-	await expect(protectedFn()).rejects.toThrow(
-		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
-	)
+	await expect(protectedFn()).rejects.toMatchObject({
+		message: "ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+		cause: errorOk,
+	})
 	expect(main).toHaveBeenCalledTimes(2)
 })
 
@@ -336,14 +335,15 @@ it("retryTest prevents retry for non-retryable errors", async ({ expect }) => {
 	const nonRetryable = new TypeError("non-retryable")
 	when(main).calledWith().thenReject(nonRetryable)
 	using protectedFn = createCircuitBreaker(main, {
-		retryTest: (err) => !((err as Error).cause instanceof TypeError),
+		retryTest: (err) => !(err instanceof TypeError),
 		retryLimit: 3,
 		minimumCandidates: 10,
 	})
 
-	await expect(protectedFn()).rejects.toThrow(
-		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
-	)
+	await expect(protectedFn()).rejects.toMatchObject({
+		message: "ERR_CIRCUIT_BREAKER_NON_RETRYABLE",
+		cause: nonRetryable,
+	})
 	expect(main).toHaveBeenCalledTimes(1)
 })
 
@@ -385,4 +385,37 @@ it("retryDelay as function is called with attempt number", async ({
 	expect(retryDelay).toHaveBeenCalledTimes(2)
 	expect(retryDelay).toHaveBeenNthCalledWith(1, 1, expect.any(AbortSignal))
 	expect(retryDelay).toHaveBeenNthCalledWith(2, 2, expect.any(AbortSignal))
+})
+
+it("uses fallback immediately if halfOpen call fails", async ({ expect }) => {
+	when(main).calledWith().thenReject(errorOk)
+	when(fallback).calledWith().thenResolve(fallbackOk)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		fallback,
+		minimumCandidates: 5,
+		resetAfter,
+		retryLimit: 3,
+	})
+
+	// Open the circuit with two simultaneous requests that fail
+	await expect(Promise.all([protectedFn(), protectedFn()])).resolves.toEqual([
+		fallbackOk,
+		fallbackOk,
+	])
+	expect(protectedFn.getState()).toBe("open")
+	expect(main).toHaveBeenCalledTimes(6)
+	expect(fallback).toHaveBeenCalledTimes(2)
+	main.mockClear()
+	fallback.mockClear()
+
+	// Advance to half-open
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// Trial call fails and fallback should immediately handle it without retrying
+	await expect(protectedFn()).resolves.toBe(fallbackOk)
+	expect(protectedFn.getState()).toBe("halfOpen")
+	expect(main).toHaveBeenCalledTimes(1)
+	expect(fallback).toHaveBeenCalledTimes(1)
 })
