@@ -219,6 +219,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		let retries = 0
 		do {
 			const current = state
+			lastError = undefined
 
 			// Closed: Normal Operation
 			if (current.status === "closed") {
@@ -243,6 +244,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					return await tryCall(current, args)
 				} catch (error) {
 					if (guardIsCurrent(current, error)) lastError = error
+					break
 				} finally {
 					// Do nothing until we have enough candidates to make a decision.
 					if (state === current && current.history.size >= minimumCandidates) {
@@ -258,11 +260,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 			// Open: Skip calls and immediately return fallback if available.
 			else if (current.status === "open" || current.status === "halfOpen") {
-				if (!fallback)
-					// eslint-disable-next-line @typescript-eslint/only-throw-error
-					throw current.failureCause ?? new CircuitError("UNKNOWN")
-
-				return fallback(...args)
+				break
 			}
 
 			// Disposed: Reject all calls with dispose error.
@@ -275,9 +273,14 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 				retryLimit,
 				retryTest,
 				signal: state.controller.signal,
+			}).catch((error: CircuitError) => {
+				lastError = error
+				return false
 			})
 		)
-		throw new Error("unknown error in circuit breaker retry logic")
+
+		if (!fallback) throw lastError ?? state.failureCause
+		return fallback(...args)
 	}
 
 	function dispose(disposeMessage = "ERR_CIRCUIT_BREAKER_DISPOSED"): void {

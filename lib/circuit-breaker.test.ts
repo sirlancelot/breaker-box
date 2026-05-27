@@ -386,3 +386,36 @@ it("retryDelay as function is called with attempt number", async ({
 	expect(retryDelay).toHaveBeenNthCalledWith(1, 1, expect.any(AbortSignal))
 	expect(retryDelay).toHaveBeenNthCalledWith(2, 2, expect.any(AbortSignal))
 })
+
+it("uses fallback immediately if halfOpen call fails", async ({ expect }) => {
+	when(main).calledWith().thenReject(errorOk)
+	when(fallback).calledWith().thenResolve(fallbackOk)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		fallback,
+		minimumCandidates: 5,
+		resetAfter,
+		retryLimit: 3,
+	})
+
+	// Open the circuit with two simultaneous requests that fail
+	await expect(Promise.all([protectedFn(), protectedFn()])).resolves.toEqual([
+		fallbackOk,
+		fallbackOk,
+	])
+	expect(protectedFn.getState()).toBe("open")
+	expect(main).toHaveBeenCalledTimes(6)
+	expect(fallback).toHaveBeenCalledTimes(2)
+	main.mockClear()
+	fallback.mockClear()
+
+	// Advance to half-open
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// Trial call fails and fallback should immediately handle it without retrying
+	await expect(protectedFn()).resolves.toBe(fallbackOk)
+	expect(protectedFn.getState()).toBe("halfOpen")
+	expect(main).toHaveBeenCalledTimes(1)
+	expect(fallback).toHaveBeenCalledTimes(1)
+})
