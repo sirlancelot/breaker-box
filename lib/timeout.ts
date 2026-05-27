@@ -20,13 +20,12 @@ export function withTimeout<Ret, Args extends readonly unknown[]>(
 	timeoutMs: number,
 	timeoutMessage = "ERR_CIRCUIT_BREAKER_TIMEOUT",
 ): MainFn<Ret, Args> & Disposable {
-	const error = new Error(timeoutMessage)
 	const controller = new AbortController()
 	const { signal } = controller
 
 	function withTimeoutFunction(...args: Args): Promise<Ret> {
 		return new Promise((resolve, reject) => {
-			const timer = setTimeout(reject, timeoutMs, error)
+			const timer = setTimeout(reject, timeoutMs, new Error(timeoutMessage))
 
 			abortable(signal, main(...args))
 				.then(resolve, reject)

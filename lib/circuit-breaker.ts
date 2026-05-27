@@ -8,12 +8,13 @@ import type {
 	StateName,
 } from "./types.js"
 import {
+	CircuitError,
 	abortable,
 	assert,
 	delayMs,
 	noop,
 	promiseTry,
-	shouldRetry,
+	shouldContinue,
 } from "./util.js"
 
 const validTransitions: Record<StateName, StateName[]> = {
@@ -36,17 +37,6 @@ interface CircuitInternalState<T extends StateName = StateName> {
 	failureRate: number
 	history: HistoryMap
 	status: T
-}
-
-class CircuitError extends Error {
-	isTransient: boolean
-	constructor(
-		message: string,
-		options?: { cause?: unknown; isTransient?: boolean },
-	) {
-		super(`ERR_CIRCUIT_BREAKER_${message}`, options)
-		this.isTransient = options?.isTransient ?? false
-	}
 }
 
 function createState(
@@ -196,7 +186,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	}
 
 	function transitionToHalfOpen(): void {
-		transitionTo("halfOpen")
+		transitionTo("halfOpen", state.failureCause)
 		if (onHalfOpen) setImmediate(onHalfOpen)
 	}
 
@@ -268,22 +258,19 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 			// Open: Skip calls and immediately return fallback if available.
 			else if (current.status === "open" || current.status === "halfOpen") {
-				if (!fallback) {
-					throw (
-						// eslint-disable-next-line @typescript-eslint/only-throw-error
-						current.failureCause ??
-						new CircuitError("OPEN", { cause: current.failureCause })
-					)
-				}
-				return await fallback(...args)
+				if (!fallback)
+					// eslint-disable-next-line @typescript-eslint/only-throw-error
+					throw current.failureCause ?? new CircuitError("UNKNOWN")
+
+				return fallback(...args)
 			}
 
 			// Disposed: Reject all calls with dispose error.
 			else throw current.failureCause
 		} while (
-			await shouldRetry({
+			await shouldContinue({
 				retries: ++retries,
-				lastError,
+				lastError: lastError?.cause ?? lastError,
 				retryDelay,
 				retryLimit,
 				retryTest,

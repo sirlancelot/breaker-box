@@ -26,6 +26,17 @@ export function assert(value: unknown, message?: string): asserts value {
 	if (!value) throw new TypeError(message)
 }
 
+export class CircuitError extends Error {
+	isTransient: boolean
+	constructor(
+		message: string,
+		options?: { cause?: unknown; isTransient?: boolean },
+	) {
+		super(`ERR_CIRCUIT_BREAKER_${message}`, options)
+		this.isTransient = options?.isTransient ?? false
+	}
+}
+
 /**
  * Returns a promise that resolves after the specified number of milliseconds.
  */
@@ -85,7 +96,7 @@ export function promiseTry<T>(fn: () => T): Promise<T> {
 	}
 }
 
-export async function shouldRetry(options: {
+export async function shouldContinue(options: {
 	retries: number
 	lastError: unknown
 	retryDelay: number | RetryDelayFn
@@ -96,8 +107,10 @@ export async function shouldRetry(options: {
 	const { retries, lastError, retryDelay, retryLimit, retryTest, signal } =
 		options
 
-	if (retries >= retryLimit) throw lastError
-	if (!retryTest(lastError)) throw lastError
+	if (retries >= retryLimit)
+		throw new CircuitError("MAX_RETRIES", { cause: lastError })
+	if (!retryTest(lastError))
+		throw new CircuitError("NON_RETRYABLE", { cause: lastError })
 
 	try {
 		if (!retryDelay) return true
