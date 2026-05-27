@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [8.1.0] - 2026-05-27
+
+### Fixed
+
+- Use fallback immediately if halfOpen call fails
+- Preserve error through halfOpen state
+
 ## [8.0.0] - 2026-05-14
 
 ### Added
@@ -77,7 +84,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...HEAD
+[8.1.0]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...v8.1.0
 [8.0.0]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...v8.0.0
 [7.0.0]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...v7.0.0
 [6.0.0]: https://github.com/sirlancelot/breaker-box/compare/v5.0.0...v6.0.0
