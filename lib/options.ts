@@ -1,11 +1,13 @@
 import type { AnyFn, CircuitBreakerOptions } from "./types.js"
 import { assert } from "./util.js"
 
+let warnedErrorIsFailure = false
+
 export function parseOptions<Fallback extends AnyFn>(
 	options: CircuitBreakerOptions<Fallback>,
 ) {
 	const {
-		errorIsFailure = () => false,
+		errorIsTransient = options.errorIsFailure ?? (() => false),
 		errorThreshold = 0,
 		errorWindow = 10_000,
 		fallback,
@@ -20,10 +22,21 @@ export function parseOptions<Fallback extends AnyFn>(
 		timeout = 0,
 	} = options
 
-	// errorIsFailure
+	if (
+		"errorIsFailure" in options &&
+		!("errorIsTransient" in options) &&
+		!warnedErrorIsFailure
+	) {
+		warnedErrorIsFailure = true
+		console.warn(
+			'breaker-box: "errorIsFailure" is deprecated. Use "errorIsTransient" instead.',
+		)
+	}
+
+	// errorIsTransient
 	assert(
-		typeof errorIsFailure === "function",
-		`"errorIsFailure" must be a function (received ${typeof errorIsFailure})`,
+		typeof errorIsTransient === "function",
+		`"errorIsTransient" must be a function (received ${typeof errorIsTransient})`,
 	)
 
 	// errorThreshold
@@ -106,7 +119,7 @@ export function parseOptions<Fallback extends AnyFn>(
 	)
 
 	return {
-		errorIsFailure,
+		errorIsTransient,
 		errorThreshold,
 		errorWindow,
 		fallback,

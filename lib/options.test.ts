@@ -1,4 +1,5 @@
-import { expect, it } from "vitest"
+import { beforeEach, expect, it } from "vitest"
+import { useMockConsole } from "../test/util.js"
 import { parseOptions } from "./options.js"
 import type { AnyFn } from "./types.js"
 
@@ -8,11 +9,18 @@ expect.addSnapshotSerializer({
 	serialize: (value: AnyFn) => JSON.stringify(value.toString()).slice(1, -1),
 })
 
+beforeEach(({ expect, onTestFinished }) => {
+	const console = useMockConsole()
+	onTestFinished(() => {
+		expect(console.allCalls).toMatchSnapshot("console messages")
+	})
+})
+
 it("sets defaults", ({ expect }) => {
 	const options = parseOptions({})
 	expect(options).toMatchInlineSnapshot(`
 			{
-			  "errorIsFailure": () => false,
+			  "errorIsTransient": () => false,
 			  "errorThreshold": 0,
 			  "errorWindow": 10000,
 			  "fallback": undefined,
@@ -33,7 +41,7 @@ it("handles errorIsFailure error", ({ expect }) => {
 	expect(() =>
 		parseOptions({ errorIsFailure: 42 as never }),
 	).toThrowErrorMatchingInlineSnapshot(
-		`[TypeError: "errorIsFailure" must be a function (received number)]`,
+		`[TypeError: "errorIsTransient" must be a function (received number)]`,
 	)
 })
 

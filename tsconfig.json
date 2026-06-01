@@ -1,6 +1,6 @@
 {
 	"exclude": ["coverage", "dist", "node_modules"],
-	"include": ["lib"],
+	"include": ["lib", "test"],
 	"compilerOptions": {
 		"target": "ESNext",
 		"moduleDetection": "force",

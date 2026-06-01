@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-06-01
+
+### Removed
+
+- **BREAKING:** Removed deprecated `withRetry` wrapper (use `retryLimit`, `retryDelay`, `retryTest` options on `createCircuitBreaker`)
+- **BREAKING:** Removed deprecated `withTimeout` wrapper (use `timeout` option on `createCircuitBreaker`)
+- **BREAKING:** Removed deprecated `CircuitState` type alias (use `StateName`)
+- **BREAKING:** Removed `RetryOptions` type export
+
+### Deprecated
+
+- `errorIsFailure` option — use `errorIsTransient` instead (same semantics, clearer name)
+
 ## [8.1.0] - 2026-05-27
 
 ### Fixed
@@ -84,7 +97,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v9.0.0...HEAD
+[9.0.0]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...v9.0.0
 [8.1.0]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...v8.1.0
 [8.0.0]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...v8.0.0
 [7.0.0]: https://github.com/sirlancelot/breaker-box/compare/v6.0.0...v7.0.0

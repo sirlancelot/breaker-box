@@ -182,7 +182,7 @@ Creates a circuit breaker around the provided async function.
 
 - `fn`: The async function to protect
 - `options`: Configuration object (optional)
-  - `errorIsFailure`: Function to determine if an error is a non-retryable failure; when true, the error is thrown immediately without counting toward metrics (default: `() => false`)
+  - `errorIsTransient`: Function to determine if an error is transient; when true, the error is thrown to the caller but does NOT count toward the circuit breaker's failure rate (default: `() => false`)
   - `errorThreshold`: Percentage (0-1) of errors that triggers circuit opening (default: `0`)
   - `errorWindow`: Time window in ms for tracking errors (default: `10_000`)
   - `fallback`: Function to call when an error occurs or circuit is open (default: undefined)
@@ -208,41 +208,15 @@ A function with the same signature as `fn` and additional methods:
 
 ### Helper Functions
 
-#### `withRetry(fn, options?)` *(Deprecated)*
+#### `CircuitError`
 
-> **Deprecated:** Use the `retryLimit`, `retryDelay`, and `retryTest` options on `createCircuitBreaker` instead.
+Error class thrown by the circuit breaker. All errors from `createCircuitBreaker` are instances of `CircuitError` with a prefixed message (e.g., `ERR_CIRCUIT_BREAKER_CALL_FAILURE`, `ERR_CIRCUIT_BREAKER_MAX_RETRIES`).
 
-Wraps a function with retry logic. Failures will be retried according to the provided options.
+**Properties:**
 
-**Parameters:**
-
-- `fn`: The async function to wrap with retry logic
-- `options`: Configuration object (optional)
-  - `maxAttempts`: Maximum number of attempts (default: `3`)
-  - `retryDelay`: Function `(attempt: number, signal: AbortSignal) => Promise<void>` for delay before retry (default: immediate)
-  - `shouldRetry`: Function `(error: unknown, attempt: number) => boolean` to determine if error should be retried (default: `() => true`)
-
-**Example:**
-
-```typescript
-const retryCall = withRetry(apiCall, {
-	maxAttempts: 5,
-	retryDelay: useExponentialBackoff(30),
-	shouldRetry: (error) => error.statusCode !== 404,
-})
-```
-
-#### `withTimeout(fn, timeoutMs, message?)` *(Deprecated)*
-
-> **Deprecated:** Use the `timeout` option on `createCircuitBreaker` instead.
-
-Wraps a function with a timeout. Rejects with `Error(message)` if execution exceeds `timeoutMs`.
-
-**Parameters:**
-
-- `fn`: The async function to wrap with timeout
-- `timeoutMs`: Timeout in milliseconds
-- `message`: Error message to use when timeout occurs (default: `"ERR_CIRCUIT_BREAKER_TIMEOUT"`)
+- `message`: Prefixed error code (e.g., `"ERR_CIRCUIT_BREAKER_OPEN"`)
+- `cause`: The underlying error that triggered the circuit breaker error
+- `isTransient`: `true` if the error was classified as transient via `errorIsTransient`
 
 #### `useExponentialBackoff(maxSeconds)`
 
