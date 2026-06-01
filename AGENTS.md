@@ -7,15 +7,19 @@ Zero-dependency circuit breaker library for Node.js. Provides `createCircuitBrea
 ## Architecture
 
 ```text
+README.md              # Installation, Documentation, Examples
+
 lib/
-├── index.ts           # Public API surface with deprecation wrappers for withRetry and withTimeout
-├── circuit-breaker.ts # Main createCircuitBreaker implementation
-├── retry.ts           # withRetry wrapper with retry logic
-├── timeout.ts         # withTimeout wrapper with timeout constraint
+├── index.ts           # Public API surface
+├── circuit-breaker.ts # Main createCircuitBreaker implementation (includes shouldContinue)
+├── circuit-error.ts   # CircuitError class
 ├── backoff.ts         # Backoff strategies (useExponentialBackoff, useFibonacciBackoff)
 ├── options.ts         # Option parsing with validation via assert()
 ├── types.ts           # TypeScript interfaces, JSDoc for public API
-└── util.ts            # Shared utilities (assert, abortable, delayMs, deprecated, identity, noop, promiseTry, shouldRetry)
+└── util.ts            # Shared utilities (assert, abortable, delayMs, noop, promiseTry)
+
+test/
+└── util.ts            # Shared test utilities (useMockConsole)
 ```
 
 **Key patterns:**
@@ -24,7 +28,7 @@ lib/
 - `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
 - History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`
-- Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`); `withRetry` and `withTimeout` wrappers are deprecated
+- Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`)
 
 **Circuit Breaker FSM:**
 
@@ -83,12 +87,6 @@ lib/
 - **Error messages**: Prefix with `ERR_CIRCUIT_BREAKER_*` (e.g., `ERR_CIRCUIT_BREAKER_DISPOSED`, `ERR_CIRCUIT_BREAKER_TIMEOUT`, `ERR_CIRCUIT_BREAKER_CALL_FAILURE`, `ERR_CIRCUIT_BREAKER_OPEN`)
 - **v8 ignore**: Use `/* v8 ignore next */` for unreachable code paths in coverage
 - **Type definitions**: All public interface types are defined in `types.ts` with JSDoc
-
-## Release Process
-
-See [`.agents-docs/release.md`](.agents-docs/release.md) for the full release checklist.
-
-**Summary:** git-flow model (`develop` + `master`). Finalize CHANGELOG on `develop`, merge to `master`, `npm version <major|minor|patch>`, push with tags, merge back to `develop`, `npm publish`. No CI/CD — manual process. `prepublishOnly` runs tests + build automatically.
 
 ## Build Output
 

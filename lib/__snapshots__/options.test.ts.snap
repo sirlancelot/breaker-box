@@ -1,0 +1,40 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`handles errorIsFailure error > console messages 1`] = `
+[
+  [
+    "warn",
+    "breaker-box: "errorIsFailure" is deprecated. Use "errorIsTransient" instead.",
+  ],
+]
+`;
+
+exports[`handles errorThreshold error > console messages 1`] = `[]`;
+
+exports[`handles errorWindow error > console messages 1`] = `[]`;
+
+exports[`handles minimumCandidates error > console messages 1`] = `[]`;
+
+exports[`handles onClose error > console messages 1`] = `[]`;
+
+exports[`handles onHalfOpen error > console messages 1`] = `[]`;
+
+exports[`handles onOpen error > console messages 1`] = `[]`;
+
+exports[`handles resetAfter < errorWindow > console messages 1`] = `[]`;
+
+exports[`handles resetAfter error > console messages 1`] = `[]`;
+
+exports[`handles retryDelay Infinity error > console messages 1`] = `[]`;
+
+exports[`handles retryDelay accepts function > console messages 1`] = `[]`;
+
+exports[`handles retryDelay error > console messages 1`] = `[]`;
+
+exports[`handles retryLimit error > console messages 1`] = `[]`;
+
+exports[`handles retryTest error > console messages 1`] = `[]`;
+
+exports[`sets defaults > console messages 1`] = `[]`;
+
+exports[`sets retry defaults > console messages 1`] = `[]`;

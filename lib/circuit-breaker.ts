@@ -5,17 +5,44 @@ import type {
 	HistoryEntry,
 	HistoryMap,
 	MainFn,
+	RetryDelayFn,
 	StateName,
 } from "./types.js"
+import { CircuitError } from "./circuit-error.js"
 import {
-	CircuitError,
 	abortable,
 	assert,
 	delayMs,
 	noop,
 	promiseTry,
-	shouldContinue,
 } from "./util.js"
+
+async function shouldContinue(options: {
+	retries: number
+	lastError: unknown
+	retryDelay: number | RetryDelayFn
+	retryLimit: number
+	retryTest: (error: unknown) => boolean
+	signal: AbortSignal
+}): Promise<true> {
+	const { retries, lastError, retryDelay, retryLimit, retryTest, signal } =
+		options
+
+	if (retries >= retryLimit)
+		throw new CircuitError("MAX_RETRIES", { cause: lastError })
+	if (!retryTest(lastError))
+		throw new CircuitError("NON_RETRYABLE", { cause: lastError })
+
+	try {
+		if (!retryDelay) return true
+		else if (typeof retryDelay === "number") await delayMs(retryDelay, signal)
+		else if (typeof retryDelay === "function") await retryDelay(retries, signal)
+	} catch {
+		/* empty */
+	}
+
+	return true
+}
 
 const validTransitions: Record<StateName, StateName[]> = {
 	closed: ["open", "disposed"],
@@ -94,7 +121,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	options: CircuitBreakerOptions<MainFn<Ret, Args>> = {},
 ): CircuitBreakerProtectedFn<Ret, Args> {
 	const {
-		errorIsFailure,
+		errorIsTransient,
 		errorThreshold,
 		errorWindow,
 		fallback,
@@ -132,7 +159,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 			historyItem.status = "rejected"
 			// Drop this request if it's a transient error that shouldn't count
 			// towards the failure rate
-			const isTransient = errorIsFailure(cause)
+			const isTransient = errorIsTransient(cause)
 			if (isTransient) historyItem = undefined
 
 			// Wrap the error in a CircuitError to provide additional context and

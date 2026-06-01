@@ -96,13 +96,13 @@ it("handles circuit lifecycle with fallback", async ({ expect }) => {
 
 it("re-throws failures", async ({ expect }) => {
 	const abortOk = new DOMException("aborted")
-	const errorIsFailure = vi
+	const errorIsTransient = vi
 		.fn((error) => error === abortOk)
-		.mockName("errorIsFailure")
+		.mockName("errorIsTransient")
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main, { times: 1 }).calledWith("bad").thenReject(abortOk)
 	using protectedFn = createCircuitBreaker(main, {
-		errorIsFailure,
+		errorIsTransient,
 		minimumCandidates: 1,
 	})
 
@@ -115,8 +115,8 @@ it("re-throws failures", async ({ expect }) => {
 		{ status: "rejected", reason: errorOk },
 	])
 	expect(protectedFn.getState()).toBe("open")
-	expect(errorIsFailure).toHaveBeenCalled()
-	expect(errorIsFailure.mock.calls).toEqual([[abortOk], [errorOk]])
+	expect(errorIsTransient).toHaveBeenCalled()
+	expect(errorIsTransient.mock.calls).toEqual([[abortOk], [errorOk]])
 })
 
 it("emits events", async ({ expect }) => {

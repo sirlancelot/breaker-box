@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **BREAKING:** Removed deprecated `withRetry` wrapper (use `retryLimit`, `retryDelay`, `retryTest` options on `createCircuitBreaker`)
+- **BREAKING:** Removed deprecated `withTimeout` wrapper (use `timeout` option on `createCircuitBreaker`)
+- **BREAKING:** Removed deprecated `CircuitState` type alias (use `StateName`)
+- **BREAKING:** Removed `RetryOptions` type export
+
+### Deprecated
+
+- `errorIsFailure` option — use `errorIsTransient` instead (same semantics, clearer name)
+
 ## [8.1.0] - 2026-05-27
 
 ### Fixed

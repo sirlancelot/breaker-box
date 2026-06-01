@@ -17,12 +17,16 @@ export type StateName = "closed" | "halfOpen" | "open" | "disposed"
  */
 export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	/**
-	 * Whether an error should be treated as non-retryable failure. When used and
-	 * when an error is considered a failure, the error will be thrown to the
-	 * caller and the request will *not* count tawards the error rate for circuit
-	 * breaker decisions.
+	 * When this returns true, the error is treated as transient — it will be
+	 * thrown to the caller but will NOT count towards the circuit breaker's
+	 * failure rate.
 	 *
 	 * @default () => false // No errors are excluded
+	 */
+	errorIsTransient?: ErrorTest
+
+	/**
+	 * @deprecated Use `errorIsTransient` instead.
 	 */
 	errorIsFailure?: ErrorTest
 
@@ -119,7 +123,7 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	 * If greater than zero, each call to `main` is raced against an
 	 * `AbortSignal.timeout` of this many milliseconds. When the timeout fires
 	 * first, the call rejects with the signal's reason and is counted as a
-	 * failure (subject to `errorIsFailure`).
+	 * failure (subject to `errorIsTransient`).
 	 *
 	 * @default 0 // No per-call timeout
 	 */
@@ -182,30 +186,3 @@ export interface RetryDelayFn {
 	(attempt: number, signal?: AbortSignal): Promise<void>
 }
 
-/**
- * Configuration options for retry behavior.
- */
-export interface RetryOptions {
-	/**
-	 * Whether an error should be treated as non-retryable. When this returns
-	 * true, the error will be thrown immediately without retrying.
-	 *
-	 * @default () => true // All errors are retried
-	 */
-	shouldRetry?: (error: unknown, attempt: number) => boolean
-
-	/**
-	 * Maximum number of retries
-	 *
-	 * @default 3
-	 */
-	maxAttempts?: number
-
-	/**
-	 * Function that returns a promise resolving when the next retry should occur.
-	 * Receives the attempt number (starting at 2) and an abort signal.
-	 *
-	 * @default () => Promise.resolve() // Immediate retry
-	 */
-	retryDelay?: RetryDelayFn
-}

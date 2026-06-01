@@ -1,4 +1,3 @@
-import type { AnyFn, RetryDelayFn } from "./types.js"
 
 /**
  * Returns a promise which rejects when the abort signal is triggered or
@@ -24,17 +23,6 @@ export const abortable = <T>(
  */
 export function assert(value: unknown, message?: string): asserts value {
 	if (!value) throw new TypeError(message)
-}
-
-export class CircuitError extends Error {
-	isTransient: boolean
-	constructor(
-		message: string,
-		options?: { cause?: unknown; isTransient?: boolean },
-	) {
-		super(`ERR_CIRCUIT_BREAKER_${message}`, options)
-		this.isTransient = options?.isTransient ?? false
-	}
 }
 
 /**
@@ -66,23 +54,6 @@ export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> => {
 		: new Promise((next) => setTimeout(next, ms))
 }
 
-export const deprecated = <T extends AnyFn>(
-	fn: T,
-	method: string,
-	message: string,
-): T => {
-	let warned = false
-	return ((...args) => {
-		if (!warned) {
-			console.warn(`[breaker-box] ${method} Deprecation: ${message}`)
-			warned = true
-		}
-		return fn(...args)
-	}) as T
-}
-
-export const identity = <T>(value: T): T => value
-
 export const noop: (...args: unknown[]) => void = () => {}
 
 /**
@@ -96,29 +67,4 @@ export function promiseTry<T>(fn: () => T): Promise<T> {
 	}
 }
 
-export async function shouldContinue(options: {
-	retries: number
-	lastError: unknown
-	retryDelay: number | RetryDelayFn
-	retryLimit: number
-	retryTest: (error: unknown) => boolean
-	signal: AbortSignal
-}): Promise<true> {
-	const { retries, lastError, retryDelay, retryLimit, retryTest, signal } =
-		options
 
-	if (retries >= retryLimit)
-		throw new CircuitError("MAX_RETRIES", { cause: lastError })
-	if (!retryTest(lastError))
-		throw new CircuitError("NON_RETRYABLE", { cause: lastError })
-
-	try {
-		if (!retryDelay) return true
-		else if (typeof retryDelay === "number") await delayMs(retryDelay, signal)
-		else if (typeof retryDelay === "function") await retryDelay(retries, signal)
-	} catch {
-		/* empty */
-	}
-
-	return true
-}

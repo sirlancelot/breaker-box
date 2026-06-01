@@ -1,11 +1,10 @@
 import { expectTypeOf, it } from "vitest"
 import {
 	createCircuitBreaker,
+	CircuitError,
 	type CircuitBreakerOptions,
 	type CircuitBreakerProtectedFn,
-	type CircuitState,
 	type MainFn,
-	type RetryOptions,
 	type StateName,
 } from "./index.js"
 
@@ -74,10 +73,6 @@ it("forces fallback to match main", () => {
 })
 
 it("exports types from main entry point", () => {
-	expectTypeOf<CircuitState>().toEqualTypeOf<
-		"closed" | "open" | "halfOpen" | "disposed"
-	>()
-
 	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorThreshold")
 	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("errorWindow")
 	expectTypeOf<CircuitBreakerOptions>().toHaveProperty("resetAfter")
@@ -87,11 +82,9 @@ it("exports types from main entry point", () => {
 		Promise<string>
 	>()
 
-	expectTypeOf<RetryOptions>().toHaveProperty("shouldRetry")
-	expectTypeOf<RetryOptions>().toHaveProperty("maxAttempts")
-	expectTypeOf<RetryOptions>().toHaveProperty("retryDelay")
-
 	expectTypeOf<StateName>().toEqualTypeOf<
 		"closed" | "open" | "halfOpen" | "disposed"
 	>()
+
+	expectTypeOf(CircuitError).toBeConstructibleWith("TEST")
 })
