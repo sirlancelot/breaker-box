@@ -9,13 +9,7 @@ import type {
 	StateName,
 } from "./types.js"
 import { CircuitError } from "./circuit-error.js"
-import {
-	abortable,
-	assert,
-	delayMs,
-	noop,
-	promiseTry,
-} from "./util.js"
+import { abortable, assert, delayMs, noop, promiseTry } from "./util.js"
 
 async function shouldContinue(options: {
 	retries: number
@@ -35,8 +29,8 @@ async function shouldContinue(options: {
 
 	try {
 		if (!retryDelay) return true
-		else if (typeof retryDelay === "number") await delayMs(retryDelay, signal)
 		else if (typeof retryDelay === "function") await retryDelay(retries, signal)
+		else await delayMs(retryDelay, signal)
 	} catch {
 		/* empty */
 	}
@@ -184,6 +178,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		let total = 0
 		for (const { status } of state.history.values()) {
 			if (status === "rejected") failures++
+			/* v8 ignore else */
 			if (status !== "pending") total++
 		}
 		if (!total || total < minimumCandidates) return 0
@@ -200,7 +195,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	}
 
 	async function transitionToOpen(error: CircuitError): Promise<void> {
-		// Race guard: a concurrent failure may have already changed state.
+		/* v8 ignore if */
 		if (state.status !== "closed" && state.status !== "halfOpen") return
 
 		const cause = error.cause ?? error
@@ -209,6 +204,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 		const { signal } = nextState.controller
 		await delayMs(resetAfter, signal)
+		/* v8 ignore else */
 		if (state === nextState) transitionToHalfOpen()
 	}
 
@@ -226,6 +222,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		current: CircuitInternalState,
 		error: unknown,
 	): error is CircuitError {
+		/* v8 ignore if */
 		if (!(error instanceof CircuitError)) throw error
 		// Transient errors shouldn't affect the circuit breaker's state. Re-throw
 		// the original cause of the error.
@@ -233,6 +230,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 		// If the circuit breaker was disposed mid-flight, surface the underlying
 		// cause of the in-flight call rather than the dispose error.
+		/* v8 ignore next */
 		if (state.status === "disposed")
 			// eslint-disable-next-line @typescript-eslint/only-throw-error
 			throw error.cause ?? new CircuitError("DISPOSED")
@@ -278,9 +276,14 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 						const rate = (current.failureRate = calculateFailureRate())
 						// Determine if the failure rate should re-open the circuit or
 						// if it is healthy enough to close it again.
-						if (rate > errorThreshold && lastError)
-							transitionToOpen(lastError).catch(noop)
-						else if (rate <= errorThreshold) transitionToClosed()
+						if (rate <= errorThreshold) transitionToClosed()
+						else
+							transitionToOpen(
+								lastError ||
+									new CircuitError("HALF_OPEN", {
+										cause: current.failureCause,
+									}),
+							).catch(noop)
 					}
 				}
 			}

@@ -16,5 +16,5 @@ Dual CJS/ESM package via pkgroll:
 - `dist/index.cjs` + `dist/index.d.cts` (CommonJS)
 - `dist/index.mjs` + `dist/index.d.mts` (ESM)
 
-Target: Node 18+
+Target: Node 22+
 Package type: ESM (`"type": "module"` in package.json) with dual CJS/ESM exports

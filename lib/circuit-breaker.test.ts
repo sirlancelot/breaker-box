@@ -157,6 +157,13 @@ it("handles shutdown", async ({ expect }) => {
 	await expect(protectedFn()).rejects.toThrow("ERR_CIRCUIT_BREAKER_DISPOSED")
 })
 
+it("dispose is idempotent", ({ expect }) => {
+	const protectedFn = createCircuitBreaker(main)
+	protectedFn[Symbol.dispose]()
+	protectedFn[Symbol.dispose]()
+	expect(protectedFn.getState()).toBe("disposed")
+})
+
 it("handles inflight requests after shutdown", async ({ expect }) => {
 	// Inflight calls should resolve or reject as normal
 	when(main)
@@ -226,6 +233,64 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 
 	vi.advanceTimersByTime(1)
 	await expect(result).rejects.toThrow(errorOk)
+})
+
+it("transient errors in half-open do not affect circuit state", async ({
+	expect,
+}) => {
+	const transientError = new DOMException("transient")
+	const errorIsTransient = (error: unknown) => error === transientError
+	when(main).calledWith("initial").thenReject(errorOk)
+	when(main).calledWith("trial").thenReject(transientError)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorIsTransient,
+		minimumCandidates: 1,
+		resetAfter,
+	})
+
+	await expect(protectedFn("initial")).rejects.toThrow(errorOk)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("trial")).rejects.toThrow(transientError)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("closed")
+})
+
+it("reopens from half-open when the aggregate failure rate stays above threshold", async ({
+	expect,
+}) => {
+	when(main).calledWith("seed").thenReject(errorOk)
+	when(main).calledWith("trial-fail").thenReject(errorOk)
+	when(main).calledWith("trial-good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.25,
+		minimumCandidates: 2,
+		resetAfter,
+	})
+
+	// Two failures reach the candidate minimum and open the circuit.
+	await expect(protectedFn("seed")).rejects.toThrow(errorOk)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// First trial fails but is not yet enough candidates to make a decision.
+	await expect(protectedFn("trial-fail")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// Second trial succeeds, but the aggregate rate (0.5) still exceeds the
+	// threshold, so the circuit reopens even though this call resolved.
+	await expect(protectedFn("trial-good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("open")
 })
 
 it("default fallback rejects with an Error when main rejects with a non-Error", async ({

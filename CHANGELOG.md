@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Half-open circuit now reopens correctly when the aggregate failure rate exceeds the threshold even if the deciding trial call succeeded
+
 ## [9.0.0] - 2026-06-01
 
 ### Removed

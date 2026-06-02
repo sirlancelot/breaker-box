@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { abortable, delayMs } from "./util.js"
+import { abortable, delayMs, promiseTry } from "./util.js"
 
 const errorOk = new Error("ok")
 
@@ -80,4 +80,16 @@ describe("delayMs", () => {
 	})
 })
 
+describe("promiseTry", () => {
+	it("resolves with the return value", async ({ expect }) => {
+		await expect(promiseTry(() => 42)).resolves.toBe(42)
+	})
 
+	it("rejects when the function throws synchronously", async ({ expect }) => {
+		await expect(
+			promiseTry(() => {
+				throw errorOk
+			}),
+		).rejects.toThrow(errorOk)
+	})
+})

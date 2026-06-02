@@ -1,4 +1,3 @@
-
 /**
  * Returns a promise which rejects when the abort signal is triggered or
  * resolves when the promise is fulfilled.
@@ -66,5 +65,3 @@ export function promiseTry<T>(fn: () => T): Promise<T> {
 		return Promise.reject(error)
 	}
 }
-
-
