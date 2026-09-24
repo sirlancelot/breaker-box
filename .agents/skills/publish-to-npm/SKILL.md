@@ -19,6 +19,16 @@ This project follows a **git-flow** branching model with `develop` for active wo
 - Tags use `vX.Y.Z` format (e.g., `v7.0.0`)
 - `npm version` creates the version bump commit and annotated git tag
 
+## Determining Bump Level
+
+Read `CHANGELOG.md`'s `[Unreleased]` section and apply these rules:
+
+- **major** — any `### Removed` items marked BREAKING, or `### Changed` items marked BREAKING
+- **minor** — any `### Added` items (new features) without breaking changes
+- **patch** — only `### Fixed`, `### Deprecated`, or documentation changes
+
+Always determine the bump level yourself from the changelog content. Do not ask the user unless the section is ambiguous or empty.
+
 ## Pre-Release Checklist
 
 Before starting a release, verify:
@@ -28,53 +38,49 @@ Before starting a release, verify:
 
 > **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically — no need to run these manually.
 
-## Release Steps
+## Release Phases
 
-Before running the script:
+The release is split into three phases because `npm publish` requires interactive browser-based OTP authentication that cannot be completed in the agent terminal.
 
-1. Move items from `[Unreleased]` into a new version section: `## [X.Y.Z] - YYYY-MM-DD`
-2. Leave an empty `## [Unreleased]` section at the top
-3. Add a comparison link at the bottom: `[X.Y.Z]: https://github.com/sirlancelot/breaker-box/compare/vPREVIOUS...vX.Y.Z`
-4. Update the `[unreleased]` link to compare against the new tag: `[unreleased]: https://github.com/sirlancelot/breaker-box/compare/vX.Y.Z...HEAD`
-5. Commit: `git commit -am "Update changelog for vX.Y.Z"`
+### Phase 1: Pre-Publish (agent runs)
 
-Then run the following script, replacing `<major|minor|patch>` with the appropriate bump level:
+1. Update CHANGELOG.md:
+   - Move items from `[Unreleased]` into a new version section: `## [X.Y.Z] - YYYY-MM-DD`
+   - Leave an empty `## [Unreleased]` section at the top
+   - Add a comparison link at the bottom: `[X.Y.Z]: https://github.com/sirlancelot/breaker-box/compare/vPREVIOUS...vX.Y.Z`
+   - Update the `[unreleased]` link: `[unreleased]: https://github.com/sirlancelot/breaker-box/compare/vX.Y.Z...HEAD`
+   - Commit: `git commit -am "Update changelog for vX.Y.Z"`
+
+2. Merge and version bump:
+
+   ```bash
+   git checkout master
+   git merge --no-ff develop
+   npm version <major|minor|patch>
+   git push origin master --follow-tags
+   ```
+
+3. Tell the user to run `npm publish` in their own terminal and wait for confirmation.
+
+### Phase 2: Publish (user runs manually)
+
+The user must run this in their own interactive terminal:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-BUMP="${1:?Usage: release.sh <major|minor|patch>}"
-
-# Merge develop into master
-git checkout master
-git merge --no-ff develop
-
-# Bump version (creates commit + annotated tag)
-npm version "$BUMP"
-
-# Push master and tags
-git push origin master --follow-tags
-
-# Authenticate and publish
-npm login
 npm publish
+```
 
-# Merge master back to develop
+This requires browser-based OTP authentication that the agent terminal cannot handle.
+
+### Phase 3: Post-Publish (agent runs after user confirms)
+
+```bash
 git checkout develop
 git merge --no-ff master
 git push origin develop
 ```
 
-## Post-Release Verification
+Then verify:
 
-- [ ] Verify the tag appears on GitHub: `https://github.com/sirlancelot/breaker-box/releases`
-- [ ] Verify the package is on npm: `npm info breaker-box version`
-- [ ] Verify `develop` contains the version bump commit (check with `git log --oneline -5`)
-
-## Historical Notes
-
-- v1.0.0 through v5.0.0 were released directly on a single branch (no develop/master split)
-- The git-flow model (develop + master) was adopted starting with v6.0.0
-- Tags are annotated (not lightweight) — `npm version` handles this
-- The `prepublishOnly` hook ensures tests and build always run before publish
+- `npm info breaker-box version` returns the new version
+- `git log --oneline -5` on develop shows the version bump commit

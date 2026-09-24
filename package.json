@@ -23,15 +23,19 @@
 		"dist"
 	],
 	"type": "module",
+	"engines": {
+		"node": ">=22"
+	},
 	"scripts": {
-		"build": "pkgroll --clean-dist --src lib --target=node18 --sourcemap --env.NODE_ENV=production",
-		"dev": "vitest",
+		"build": "pkgroll --clean-dist --src lib --target=node22 --sourcemap --env.NODE_ENV=production",
+		"dev": "vitest dev --update",
 		"format": "prettier --cache --write .",
 		"lint": "eslint . --fix",
 		"prepublishOnly": "npm run test && npm run build",
 		"reinstall": "rm -rf node_modules package-lock.json && npm install",
 		"test": "vitest --run --typecheck",
-		"test:coverage": "vitest --run --coverage"
+		"test:coverage": "vitest --run --coverage",
+		"type-check": "tsc --noEmit"
 	},
 	"keywords": [
 		"async",
@@ -43,17 +47,22 @@
 	"author": "Matthew Pietz <sirlancelot@gmail.com>",
 	"license": "ISC",
 	"devDependencies": {
-		"@eslint/js": "9.39.1",
-		"@eslint/json": "0.14.0",
-		"@eslint/markdown": "7.5.1",
-		"@types/node": "25.0.1",
-		"@vitest/coverage-v8": "4.0.15",
-		"eslint": "9.39.1",
-		"pkgroll": "2.21.4",
-		"prettier": "3.7.4",
-		"typescript": "5.9.3",
-		"typescript-eslint": "8.49.0",
-		"vitest": "4.0.15",
+		"@eslint/js": "10.0.1",
+		"@eslint/json": "2.0.0",
+		"@eslint/markdown": "8.0.2",
+		"@types/node": "25.9.1",
+		"@vitest/coverage-v8": "4.1.7",
+		"eslint": "10.4.1",
+		"pkgroll": "2.27.1",
+		"prettier": "3.8.3",
+		"typescript": "6.0.3",
+		"typescript-eslint": "8.60.0",
+		"vitest": "4.1.7",
 		"vitest-when": "0.10.0"
+	},
+	"overrides": {
+		"pkgroll@2.27.1": {
+			"typescript": "$typescript"
+		}
 	}
 }

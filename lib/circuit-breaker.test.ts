@@ -32,6 +32,31 @@ it("operates transparently", async ({ expect }) => {
 	expect(protectedFn.getFailureRate()).toBe(0)
 })
 
+it("reports the live failure rate of the error window", async ({ expect }) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		errorWindow: 10_000,
+		minimumCandidates: 2,
+		retryLimit: 1,
+	})
+
+	expect(protectedFn.getFailureRate()).toBeNaN()
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getFailureRate()).toBeNaN()
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getFailureRate()).toBe(0.5)
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getFailureRate()).toBe(1 / 3)
+	expect(protectedFn.getState()).toBe("closed")
+
+	await vi.advanceTimersByTimeAsync(10_000)
+	expect(protectedFn.getFailureRate()).toBeNaN()
+})
+
 it("handles circuit lifecycle", async ({ expect }) => {
 	when(main).calledWith("bad").thenReject(errorOk)
 	when(main).calledWith("good").thenResolve(ok)
@@ -157,6 +182,13 @@ it("handles shutdown", async ({ expect }) => {
 	await expect(protectedFn()).rejects.toThrow("ERR_CIRCUIT_BREAKER_DISPOSED")
 })
 
+it("dispose is idempotent", ({ expect }) => {
+	const protectedFn = createCircuitBreaker(main)
+	protectedFn[Symbol.dispose]()
+	protectedFn[Symbol.dispose]()
+	expect(protectedFn.getState()).toBe("disposed")
+})
+
 it("handles inflight requests after shutdown", async ({ expect }) => {
 	// Inflight calls should resolve or reject as normal
 	when(main)
@@ -226,6 +258,134 @@ it("handles half-open requests after shutdown", async ({ expect }) => {
 
 	vi.advanceTimersByTime(1)
 	await expect(result).rejects.toThrow(errorOk)
+})
+
+it("transient errors in half-open do not affect circuit state", async ({
+	expect,
+}) => {
+	const transientError = new DOMException("transient")
+	const errorIsTransient = (error: unknown) => error === transientError
+	when(main).calledWith("initial").thenReject(errorOk)
+	when(main).calledWith("trial").thenReject(transientError)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorIsTransient,
+		minimumCandidates: 1,
+		resetAfter,
+	})
+
+	await expect(protectedFn("initial")).rejects.toThrow(errorOk)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("trial")).rejects.toThrow(transientError)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("closed")
+})
+
+it("reopens from half-open when the aggregate failure rate stays above threshold", async ({
+	expect,
+}) => {
+	when(main).calledWith("seed").thenReject(errorOk)
+	when(main).calledWith("trial-fail").thenReject(errorOk)
+	when(main).calledWith("trial-good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.25,
+		minimumCandidates: 2,
+		resetAfter,
+	})
+
+	// Two failures reach the candidate minimum and open the circuit.
+	await expect(protectedFn("seed")).rejects.toThrow(errorOk)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// First trial fails but is not yet enough candidates to make a decision.
+	await expect(protectedFn("trial-fail")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	// Second trial succeeds, but the aggregate rate (0.5) still exceeds the
+	// threshold, so the circuit reopens even though this call resolved.
+	await expect(protectedFn("trial-good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("open")
+})
+
+it("does not carry failures across states when resetAfter < errorWindow", async ({
+	expect,
+}) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		errorWindow: 10_000,
+		minimumCandidates: 2,
+		resetAfter: 1_000,
+		retryLimit: 1,
+	})
+
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(1_000)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("closed")
+
+	// The earlier failures are still inside errorWindow, but must not count
+	// towards the new closed state's failure rate.
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getState()).toBe("closed")
+	expect(protectedFn.getFailureRate()).toBeNaN()
+})
+
+it("waits for all concurrent half-open trials to settle before deciding", async ({
+	expect,
+}) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main)
+		.calledWith("slow")
+		.thenDo(() => delayMs(500).then(() => Promise.reject(errorOk)))
+	using protectedFn = createCircuitBreaker(main, {
+		minimumCandidates: 2,
+		resetAfter,
+		retryLimit: 1,
+	})
+
+	await expect(protectedFn("bad")).rejects.toThrow()
+	await expect(protectedFn("bad")).rejects.toThrow()
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	const slow = expect(protectedFn("slow")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await vi.advanceTimersByTimeAsync(500)
+	await slow
+	expect(protectedFn.getState()).toBe("open")
 })
 
 it("default fallback rejects with an Error when main rejects with a non-Error", async ({

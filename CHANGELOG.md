@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [10.0.0] - 2026-09-24
+
+### Changed
+
+- **BREAKING:** `getFailureRate()` returns `NaN` instead of `0` when fewer than `minimumCandidates` calls have settled, including right after every state transition
+- `getFailureRate()` now calculates the rate on demand from the current error window, instead of returning the value stored at the last failure
+- `resetAfter` no longer needs to be greater than or equal to `errorWindow`
+
+### Removed
+
+- **BREAKING:** Removed deprecated `dispose()` from the `CircuitBreakerProtectedFn` type (use `Symbol.dispose` / `using`); the runtime method remains until a future version
+
+### Fixed
+
+- Half-open circuit now reopens correctly when the aggregate failure rate exceeds the threshold even if the deciding trial call succeeded
+- Half-open circuit now waits for all concurrent trial calls to settle before deciding, instead of closing as soon as the first trial settled
+
 ## [9.0.0] - 2026-06-01
 
 ### Removed
@@ -97,7 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v9.0.0...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v10.0.0...HEAD
+[10.0.0]: https://github.com/sirlancelot/breaker-box/compare/v9.0.0...v10.0.0
 [9.0.0]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...v9.0.0
 [8.1.0]: https://github.com/sirlancelot/breaker-box/compare/v8.0.0...v8.1.0
 [8.0.0]: https://github.com/sirlancelot/breaker-box/compare/v7.0.0...v8.0.0

@@ -1,4 +1,3 @@
-
 /**
  * Returns a promise which rejects when the abort signal is triggered or
  * resolves when the promise is fulfilled.
@@ -56,15 +55,9 @@ export const delayMs = (ms: number, signal?: AbortSignal): Promise<void> => {
 
 export const noop: (...args: unknown[]) => void = () => {}
 
-/**
- * Polyfill for `Promise.try()`
- */
-export function promiseTry<T>(fn: () => T): Promise<T> {
-	try {
-		return Promise.resolve(fn())
-	} catch (error) {
-		return Promise.reject(error)
-	}
-}
-
-
+export const promiseTry =
+	Promise.try?.bind(Promise) ||
+	(<T, U extends unknown[]>(
+		fn: (...args: U) => T | PromiseLike<T>,
+		...args: U
+	): Promise<T> => new Promise((resolve) => resolve(fn(...args))))

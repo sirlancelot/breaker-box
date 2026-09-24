@@ -17,7 +17,7 @@ See [architecture.md](.agents-docs/architecture.md) for file structure, FSM stat
 | `npm run test:coverage`     | Run tests with coverage                |
 | `npm test`                  | Run tests once (includes typecheck)    |
 | `npx tsc --noEmit`          | Type-check without emit                |
-| `npx vitest index.test.ts`  | Run single test file                   |
+| `npx vitest <file>.test.ts` | Run single test file                   |
 | `npx vitest -t "test name"` | Run specific test by name              |
 
 See [testing.md](.agents-docs/testing.md) for fake timers, mocking, parameterized tests, and snapshot conventions.

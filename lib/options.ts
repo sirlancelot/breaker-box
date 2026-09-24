@@ -86,10 +86,6 @@ export function parseOptions<Fallback extends AnyFn>(
 		resetAfter >= 1_000,
 		`"resetAfter" must be milliseconds of at least 1 second (received ${resetAfter})`,
 	)
-	assert(
-		resetAfter >= errorWindow,
-		`"resetAfter" must be greater than or equal to "errorWindow" (received ${resetAfter}, expected >= ${errorWindow})`,
-	)
 
 	// retryDelay
 	assert(
