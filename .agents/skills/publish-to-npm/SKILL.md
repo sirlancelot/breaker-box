@@ -34,9 +34,11 @@ Always determine the bump level yourself from the changelog content. Do not ask 
 Before starting a release, verify:
 
 1. All changes for the release are merged to `develop`
-2. CHANGELOG.md `[Unreleased]` section is populated with all changes
+2. Working tree is clean and `develop` is in sync with `origin/develop` (`git fetch && git status -sb`); if local history was rewritten, the user must force-push before continuing
+3. `npm test` passes on `develop` — stop and report failures rather than releasing
+4. CHANGELOG.md `[Unreleased]` section is populated with all changes
 
-> **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically — no need to run these manually.
+> **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically, but a failure there only surfaces after the release commit and tag are pushed. Check step 3 up front.
 
 ## Release Phases
 
@@ -70,7 +72,7 @@ The user must run this in their own interactive terminal:
 npm publish
 ```
 
-This requires browser-based OTP authentication that the agent terminal cannot handle.
+This requires browser-based OTP authentication that the agent terminal cannot handle. Use the ask user tool with a yes/no prompt to confirm when the publish is complete.
 
 ### Phase 3: Post-Publish (agent runs after user confirms)
 
@@ -82,5 +84,5 @@ git push origin develop
 
 Then verify:
 
-- `npm info breaker-box version` returns the new version
+- `npm view breaker-box dist-tags --prefer-online --min-release-age=0` shows the new version as `latest`
 - `git log --oneline -5` on develop shows the version bump commit
