@@ -68,7 +68,7 @@ function createState(
 	return {
 		controller,
 		failureCause,
-		failureRate: 0,
+		failureRate: NaN,
 		history: new Map(),
 		status,
 	}
@@ -181,7 +181,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 			/* v8 ignore else */
 			if (status !== "pending") total++
 		}
-		if (!total || total < minimumCandidates) return 0
+		if (total < minimumCandidates) return NaN
 		return failures / total
 	}
 
@@ -272,8 +272,9 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					break
 				} finally {
 					// Do nothing until we have enough candidates to make a decision.
-					if (state === current && current.history.size >= minimumCandidates) {
-						const rate = (current.failureRate = calculateFailureRate())
+					const rate = state === current ? calculateFailureRate() : NaN
+					if (!Number.isNaN(rate)) {
+						current.failureRate = rate
 						// Determine if the failure rate should re-open the circuit or
 						// if it is healthy enough to close it again.
 						if (rate <= errorThreshold) transitionToClosed()

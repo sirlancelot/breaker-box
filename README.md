@@ -25,7 +25,7 @@ async function unreliableApiCall(data: string) {
 }
 
 const protectedApiCall = createCircuitBreaker(unreliableApiCall, {
-	errorThreshold: 0.5, // Open circuit when 50% of calls fail
+	errorThreshold: 0.5, // Open circuit when more than 50% of calls fail
 	errorWindow: 10_000, // Track errors over 10 second window
 	// Fallback receives the same parameters as the original function
 	fallback: (data) => ({ data: "fallback data", error: "API call failed" }),
@@ -41,7 +41,7 @@ try {
 }
 ```
 
-The above example creates a function named `protectedApiCall` which, when called will execute the `unreliableApiCall` function with circuit breaker protection. If the underlying function fails, then `fallback` is called instead. If **50%** of the calls fail within a **10-second sliding window**, then the circuit breaker will open and subsequent calls to `protectedApiCall` will **always** use the `fallback` for the next **30 seconds**.
+The above example creates a function named `protectedApiCall` which, when called will execute the `unreliableApiCall` function with circuit breaker protection. If the underlying function fails, then `fallback` is called instead. If more than **50%** of the calls fail within a **10-second sliding window**, then the circuit breaker will open and subsequent calls to `protectedApiCall` will **always** use the `fallback` for the next **30 seconds**.
 
 ## Timeout & Retry
 
@@ -151,7 +151,7 @@ The following methods can retrieve information about the circuit breaker:
 // Check current state: "closed", "open", "halfOpen", "disposed"
 console.log("Current state:", protectedFunction.getState())
 
-// Check failure rate: Number between 0 and 1
+// Check failure rate: Number between 0 and 1, or NaN if there is not enough data
 console.log("Failure rate:", protectedFunction.getFailureRate())
 
 // Get the last error that caused the circuit to open: undefined or Error object
@@ -183,10 +183,10 @@ Creates a circuit breaker around the provided async function.
 - `fn`: The async function to protect
 - `options`: Configuration object (optional)
   - `errorIsTransient`: Function to determine if an error is transient; when true, the error is thrown to the caller but does NOT count toward the circuit breaker's failure rate (default: `() => false`)
-  - `errorThreshold`: Percentage (0-1) of errors that triggers circuit opening (default: `0`)
+  - `errorThreshold`: Failure rate (0-1) that must be exceeded to open the circuit (default: `0`)
   - `errorWindow`: Time window in ms for tracking errors (default: `10_000`)
   - `fallback`: Function to call when an error occurs or circuit is open (default: undefined)
-  - `minimumCandidates`: Minimum calls before calculating error rate (default: `1`)
+  - `minimumCandidates`: Minimum settled calls before calculating error rate; also the number of trial calls allowed while half-open, all of which must settle before the circuit closes or reopens (default: `1`)
   - `onClose`: Function called when circuit closes (default: undefined)
   - `onHalfOpen`: Function called when circuit enters half-open state (default: undefined)
   - `onOpen`: Function called when circuit opens (default: undefined)
@@ -201,7 +201,7 @@ Creates a circuit breaker around the provided async function.
 A function with the same signature as `fn` and additional methods:
 
 - `.dispose(message?)`: *(Deprecated)* Clean up resources and reject future calls. Use `Symbol.dispose` / `using` keyword instead.
-- `.getFailureRate()`: Returns the current failure rate (0-1) or 0 if fewer than `minimumCandidates` calls have been made
+- `.getFailureRate()`: Returns the failure rate (0-1) of the current state, recalculated whenever a call settles. Returns `NaN` when fewer than `minimumCandidates` calls have settled, or when no calculation has happened since the last state transition.
 - `.getLatestError()`: Returns the error which triggered the circuit breaker
 - `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`)
 - `[Symbol.dispose]()`: Clean up resources and reject future calls. Supports `using` syntax.

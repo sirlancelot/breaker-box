@@ -24,6 +24,7 @@ test/
 - `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
 - History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`. Each state gets a fresh history, so calls never count toward a later state
+- `calculateFailureRate()` returns `NaN` when fewer than `minimumCandidates` calls have settled; `NaN` withholds transitions and is exposed as-is via `.getFailureRate()` (each new state starts at `NaN`)
 - Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`)
 
 ## Circuit Breaker FSM
@@ -37,6 +38,7 @@ test/
   - `open` → `halfOpen` (after resetAfter timer) or `disposed`
   - `halfOpen` → `closed` (aggregate failure rate at or below threshold), `open` (aggregate failure rate exceeds threshold), or `disposed`
   - `disposed` → none (terminal state)
+- During `halfOpen`, exactly `minimumCandidates` trial calls must settle within `errorWindow` time in order to decide the next transition.
 - Cleanup coordinated via AbortController—each state transition aborts the previous state's controller
 
 ## Option Constraints (validated in `options.ts`)

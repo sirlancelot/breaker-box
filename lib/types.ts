@@ -7,7 +7,7 @@ export type ErrorTest = (error: unknown) => boolean
  *
  * - `closed`: Normal operation, tracking failures
  * - `open`: Failing state, rejecting calls or using fallback
- * - `halfOpen`: Testing recovery with a single trial call
+ * - `halfOpen`: Testing recovery with up to `minimumCandidates` trial calls
  * - `disposed`: Terminal state, all calls rejected
  */
 export type StateName = "closed" | "halfOpen" | "open" | "disposed"
@@ -31,7 +31,7 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	errorIsFailure?: ErrorTest
 
 	/**
-	 * The percentage of errors (as a number between 0 and 1) which must occur
+	 * The failure rate (as a number between 0 and 1) which must be exceeded
 	 * within the error window before the circuit breaker opens.
 	 *
 	 * @default 0 // Any error opens the circuit
@@ -59,9 +59,10 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	fallback?: Fallback
 
 	/**
-	 * The minimum number of calls that must be made before calculating the
-	 * error rate and determining whether the circuit breaker should open based on
-	 * the `errorThreshold`.
+	 * The minimum number of settled calls required before calculating the error
+	 * rate and determining whether the circuit breaker should open based on the
+	 * `errorThreshold`. While half-open, this is also the number of trial calls
+	 * allowed, all of which must settle before the circuit closes or reopens.
 	 *
 	 * @default 1
 	 */
@@ -146,7 +147,12 @@ export interface CircuitBreakerProtectedFn<
 	 */
 	dispose(this: void, disposeMessage?: string): void
 
-	/** Get the current failure rate of the circuit breaker */
+	/**
+	 * Get the failure rate (0-1) of the current state, recalculated whenever a
+	 * call fails. Returns `NaN` when fewer than `minimumCandidates` calls have
+	 * settled at the last calculation, or when no calculation has happened since
+	 * the last state transition.
+	 */
 	getFailureRate(this: void): number
 
 	/** Get the last error which triggered the circuit breaker */

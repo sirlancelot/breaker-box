@@ -9,11 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **BREAKING:** `getFailureRate()` returns `NaN` instead of `0` when fewer than `minimumCandidates` calls have settled, including right after every state transition
 - `resetAfter` no longer needs to be greater than or equal to `errorWindow`
 
 ### Fixed
 
 - Half-open circuit now reopens correctly when the aggregate failure rate exceeds the threshold even if the deciding trial call succeeded
+- Half-open circuit now waits for all concurrent trial calls to settle before deciding, instead of closing as soon as the first trial settled
 
 ## [9.0.0] - 2026-06-01
 

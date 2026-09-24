@@ -29,7 +29,7 @@ it("operates transparently", async ({ expect }) => {
 
 	expect(result).toBe(ok)
 	expect(protectedFn.getState()).toBe("closed")
-	expect(protectedFn.getFailureRate()).toBe(0)
+	expect(protectedFn.getFailureRate()).toBeNaN()
 })
 
 it("handles circuit lifecycle", async ({ expect }) => {
@@ -328,6 +328,39 @@ it("does not carry failures across states when resetAfter < errorWindow", async 
 	)
 	expect(protectedFn.getState()).toBe("closed")
 	expect(protectedFn.getFailureRate()).toBeNaN()
+})
+
+it("waits for all concurrent half-open trials to settle before deciding", async ({
+	expect,
+}) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main)
+		.calledWith("slow")
+		.thenDo(() => delayMs(500).then(() => Promise.reject(errorOk)))
+	using protectedFn = createCircuitBreaker(main, {
+		minimumCandidates: 2,
+		resetAfter,
+		retryLimit: 1,
+	})
+
+	await expect(protectedFn("bad")).rejects.toThrow()
+	await expect(protectedFn("bad")).rejects.toThrow()
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	const slow = expect(protectedFn("slow")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await vi.advanceTimersByTimeAsync(500)
+	await slow
+	expect(protectedFn.getState()).toBe("open")
 })
 
 it("default fallback rejects with an Error when main rejects with a non-Error", async ({
