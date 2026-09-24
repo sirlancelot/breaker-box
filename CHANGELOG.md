@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING:** `getFailureRate()` returns `NaN` instead of `0` when fewer than `minimumCandidates` calls have settled, including right after every state transition
+- `getFailureRate()` now calculates the rate on demand from the current error window, instead of returning the value stored at the last failure
 - `resetAfter` no longer needs to be greater than or equal to `errorWindow`
 
 ### Removed

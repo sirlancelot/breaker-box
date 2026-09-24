@@ -29,6 +29,31 @@ it("operates transparently", async ({ expect }) => {
 
 	expect(result).toBe(ok)
 	expect(protectedFn.getState()).toBe("closed")
+	expect(protectedFn.getFailureRate()).toBe(0)
+})
+
+it("reports the live failure rate of the error window", async ({ expect }) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		errorWindow: 10_000,
+		minimumCandidates: 2,
+		retryLimit: 1,
+	})
+
+	expect(protectedFn.getFailureRate()).toBeNaN()
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getFailureRate()).toBeNaN()
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getFailureRate()).toBe(0.5)
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getFailureRate()).toBe(1 / 3)
+	expect(protectedFn.getState()).toBe("closed")
+
+	await vi.advanceTimersByTimeAsync(10_000)
 	expect(protectedFn.getFailureRate()).toBeNaN()
 })
 

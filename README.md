@@ -200,7 +200,7 @@ Creates a circuit breaker around the provided async function.
 
 A function with the same signature as `fn` and additional methods:
 
-- `.getFailureRate()`: Returns the failure rate (0-1) of the current state, recalculated whenever a call settles. Returns `NaN` when fewer than `minimumCandidates` calls have settled, or when no calculation has happened since the last state transition.
+- `.getFailureRate()`: Calculates the failure rate (0-1) of calls settled within the current state's `errorWindow`. Returns `NaN` when fewer than `minimumCandidates` calls have settled, which is always the case while open and immediately after any state transition.
 - `.getLatestError()`: Returns the error which triggered the circuit breaker.
 - `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`).
 - `[Symbol.dispose]()`: Clean up resources and reject future calls. Supports `using` syntax.

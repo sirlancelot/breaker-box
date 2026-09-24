@@ -24,7 +24,7 @@ test/
 - `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
 - History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`. Each state gets a fresh history, so calls never count toward a later state
-- `calculateFailureRate()` returns `NaN` when fewer than `minimumCandidates` calls have settled; `NaN` withholds transitions and is exposed as-is via `.getFailureRate()` (each new state starts at `NaN`)
+- `calculateFailureRate()` returns `NaN` when fewer than `minimumCandidates` calls have settled; `NaN` withholds transitions. `.getFailureRate()` is `calculateFailureRate` itself (computed on demand, no stored rate), keeping the happy path free of rate calculations
 - Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`)
 
 ## Circuit Breaker FSM

@@ -55,7 +55,6 @@ function assertTransition(from: StateName, to: StateName): void {
 interface CircuitInternalState<T extends StateName = StateName> {
 	controller: AbortController
 	failureCause: unknown
-	failureRate: number
 	history: HistoryMap
 	status: T
 }
@@ -65,13 +64,7 @@ function createState(
 	failureCause?: unknown,
 ): CircuitInternalState {
 	const controller = new AbortController()
-	return {
-		controller,
-		failureCause,
-		failureRate: NaN,
-		history: new Map(),
-		status,
-	}
+	return { controller, failureCause, history: new Map(), status }
 }
 
 /**
@@ -254,8 +247,8 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					if (guardIsCurrent(current, error)) {
 						lastError = error
 						// Determine if the failure rate should open the circuit.
-						const rate = (current.failureRate = calculateFailureRate())
-						if (rate > errorThreshold) transitionToOpen(error).catch(noop)
+						if (calculateFailureRate() > errorThreshold)
+							transitionToOpen(error).catch(noop)
 					}
 				}
 			}
@@ -274,7 +267,6 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					// Do nothing until we have enough candidates to make a decision.
 					const rate = state === current ? calculateFailureRate() : NaN
 					if (!Number.isNaN(rate)) {
-						current.failureRate = rate
 						// Determine if the failure rate should re-open the circuit or
 						// if it is healthy enough to close it again.
 						if (rate <= errorThreshold) transitionToClosed()
@@ -323,7 +315,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	const wrapped = protectedFn as CircuitBreakerProtectedFn<Ret, Args>
 	wrapped[Symbol.dispose] = () => dispose()
 	Object.assign(wrapped, { dispose })
-	wrapped.getFailureRate = () => state.failureRate
+	wrapped.getFailureRate = calculateFailureRate
 	wrapped.getLatestError = () => state.failureCause
 	wrapped.getState = () => state.status
 

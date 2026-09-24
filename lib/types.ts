@@ -142,10 +142,10 @@ export interface CircuitBreakerProtectedFn<
 	(...args: Args): Promise<Ret>
 
 	/**
-	 * Get the failure rate (0-1) of the current state, recalculated whenever a
-	 * call fails. Returns `NaN` when fewer than `minimumCandidates` calls have
-	 * settled at the last calculation, or when no calculation has happened since
-	 * the last state transition.
+	 * Calculate the failure rate (0-1) of calls settled within the current
+	 * state's error window. Returns `NaN` when fewer than `minimumCandidates`
+	 * calls have settled, which is always the case while open and immediately
+	 * after any state transition.
 	 */
 	getFailureRate(this: void): number
 
