@@ -202,19 +202,19 @@ A function with the same signature as `fn` and additional methods:
 
 - `.dispose(message?)`: *(Deprecated)* Clean up resources and reject future calls. Use `Symbol.dispose` / `using` keyword instead.
 - `.getFailureRate()`: Returns the failure rate (0-1) of the current state, recalculated whenever a call settles. Returns `NaN` when fewer than `minimumCandidates` calls have settled, or when no calculation has happened since the last state transition.
-- `.getLatestError()`: Returns the error which triggered the circuit breaker
-- `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`)
+- `.getLatestError()`: Returns the error which triggered the circuit breaker.
+- `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`).
 - `[Symbol.dispose]()`: Clean up resources and reject future calls. Supports `using` syntax.
 
 ### Helper Functions
 
 #### `CircuitError`
 
-Error class thrown by the circuit breaker. All errors from `createCircuitBreaker` are instances of `CircuitError` with a prefixed message (e.g., `ERR_CIRCUIT_BREAKER_CALL_FAILURE`, `ERR_CIRCUIT_BREAKER_MAX_RETRIES`).
+Error class thrown by the circuit breaker, with a prefixed message: `ERR_CIRCUIT_BREAKER_CALL_FAILURE`, `ERR_CIRCUIT_BREAKER_MAX_RETRIES`, `ERR_CIRCUIT_BREAKER_NON_RETRYABLE`, or `ERR_CIRCUIT_BREAKER_HALF_OPEN`. Not every rejection is a `CircuitError`: transient errors are re-thrown as-is, calls made while the circuit is open (without a fallback) reject with the error that opened it, and calls after disposal reject with a `ReferenceError`.
 
 **Properties:**
 
-- `message`: Prefixed error code (e.g., `"ERR_CIRCUIT_BREAKER_OPEN"`)
+- `message`: Prefixed error code (e.g., `"ERR_CIRCUIT_BREAKER_MAX_RETRIES"`)
 - `cause`: The underlying error that triggered the circuit breaker error
 - `isTransient`: `true` if the error was classified as transient via `errorIsTransient`
 
@@ -260,7 +260,7 @@ Returns a promise that resolves after the specified number of milliseconds. Supp
 | `npm run test:coverage`     | Run tests with coverage                |
 | `npm test`                  | Run tests once (includes typecheck)    |
 | `npx tsc --noEmit`          | Type-check without emit                |
-| `npx vitest index.test.ts`  | Run single test file                   |
+| `npx vitest <file>.test.ts` | Run single test file                   |
 | `npx vitest -t "test name"` | Run specific test by name              |
 
 ## Contributing
