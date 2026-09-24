@@ -167,9 +167,9 @@ console.log("Last error:", protectedFunction.getLatestError())
 	// automatically disposed at end of block
 }
 
-// Or dispose manually (deprecated)
+// Or dispose manually
 const protectedFunction = createCircuitBreaker(unreliableApiCall)
-protectedFunction.dispose()
+protectedFunction[Symbol.dispose]()
 ```
 
 ## API Reference
@@ -200,7 +200,6 @@ Creates a circuit breaker around the provided async function.
 
 A function with the same signature as `fn` and additional methods:
 
-- `.dispose(message?)`: *(Deprecated)* Clean up resources and reject future calls. Use `Symbol.dispose` / `using` keyword instead.
 - `.getFailureRate()`: Returns the failure rate (0-1) of the current state, recalculated whenever a call settles. Returns `NaN` when fewer than `minimumCandidates` calls have settled, or when no calculation has happened since the last state transition.
 - `.getLatestError()`: Returns the error which triggered the circuit breaker.
 - `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`).

@@ -322,7 +322,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 
 	const wrapped = protectedFn as CircuitBreakerProtectedFn<Ret, Args>
 	wrapped[Symbol.dispose] = () => dispose()
-	wrapped.dispose = dispose
+	Object.assign(wrapped, { dispose })
 	wrapped.getFailureRate = () => state.failureRate
 	wrapped.getLatestError = () => state.failureCause
 	wrapped.getState = () => state.status

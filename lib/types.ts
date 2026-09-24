@@ -142,12 +142,6 @@ export interface CircuitBreakerProtectedFn<
 	(...args: Args): Promise<Ret>
 
 	/**
-	 * @deprecated Use `Symbol.dispose` or `using` keyword instead.
-	 * @default "ERR_CIRCUIT_BREAKER_DISPOSED"
-	 */
-	dispose(this: void, disposeMessage?: string): void
-
-	/**
 	 * Get the failure rate (0-1) of the current state, recalculated whenever a
 	 * call fails. Returns `NaN` when fewer than `minimumCandidates` calls have
 	 * settled at the last calculation, or when no calculation has happened since

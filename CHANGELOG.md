@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **BREAKING:** `getFailureRate()` returns `NaN` instead of `0` when fewer than `minimumCandidates` calls have settled, including right after every state transition
 - `resetAfter` no longer needs to be greater than or equal to `errorWindow`
 
+### Removed
+
+- **BREAKING:** Removed deprecated `dispose()` from the `CircuitBreakerProtectedFn` type (use `Symbol.dispose` / `using`); the runtime method remains until a future version
+
 ### Fixed
 
 - Half-open circuit now reopens correctly when the aggregate failure rate exceeds the threshold even if the deciding trial call succeeded

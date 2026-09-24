@@ -17,7 +17,6 @@ it("handles no arguments", () => {
 	>()
 
 	expectTypeOf(protectedNoArgs).returns.toEqualTypeOf<Promise<"result">>()
-	expectTypeOf(protectedNoArgs.dispose).toBeFunction()
 	expectTypeOf(protectedNoArgs.getState).returns.toEqualTypeOf<
 		"closed" | "open" | "halfOpen" | "disposed"
 	>()
