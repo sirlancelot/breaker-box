@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `resetAfter` no longer needs to be greater than or equal to `errorWindow`
+
 ### Fixed
 
 - Half-open circuit now reopens correctly when the aggregate failure rate exceeds the threshold even if the deciding trial call succeeded

@@ -101,14 +101,6 @@ it("handles resetAfter error", ({ expect }) => {
 	)
 })
 
-it("handles resetAfter < errorWindow", ({ expect }) => {
-	expect(() =>
-		parseOptions({ resetAfter: 1_000, errorWindow: 2_000 }),
-	).toThrowErrorMatchingInlineSnapshot(
-		`[TypeError: "resetAfter" must be greater than or equal to "errorWindow" (received 1000, expected >= 2000)]`,
-	)
-})
-
 it("sets retry defaults", ({ expect }) => {
 	const options = parseOptions({})
 	expect(options.retryDelay).toBe(0)

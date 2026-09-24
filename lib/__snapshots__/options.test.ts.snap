@@ -21,8 +21,6 @@ exports[`handles onHalfOpen error > console messages 1`] = `[]`;
 
 exports[`handles onOpen error > console messages 1`] = `[]`;
 
-exports[`handles resetAfter < errorWindow > console messages 1`] = `[]`;
-
 exports[`handles resetAfter error > console messages 1`] = `[]`;
 
 exports[`handles retryDelay Infinity error > console messages 1`] = `[]`;

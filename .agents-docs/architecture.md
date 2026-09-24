@@ -23,7 +23,7 @@ test/
 - Functions return wrapped functions with attached methods (`[Symbol.dispose]()`, `.getState()`, `.getFailureRate()`, `.getLatestError()`)
 - `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
-- History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`
+- History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`. Each state gets a fresh history, so calls never count toward a later state
 - Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`)
 
 ## Circuit Breaker FSM
@@ -43,7 +43,7 @@ test/
 
 - `errorThreshold`: 0–1 inclusive
 - `errorWindow`: minimum 1000ms
-- `resetAfter`: minimum 1000ms and must be `>= errorWindow`
+- `resetAfter`: minimum 1000ms
 - `minimumCandidates`: minimum 1
 - `retryDelay`: non-negative finite number or function
 - `retryLimit`: minimum 1

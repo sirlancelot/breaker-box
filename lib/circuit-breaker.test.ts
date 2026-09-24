@@ -293,6 +293,43 @@ it("reopens from half-open when the aggregate failure rate stays above threshold
 	expect(protectedFn.getState()).toBe("open")
 })
 
+it("does not carry failures across states when resetAfter < errorWindow", async ({
+	expect,
+}) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.5,
+		errorWindow: 10_000,
+		minimumCandidates: 2,
+		resetAfter: 1_000,
+		retryLimit: 1,
+	})
+
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(1_000)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("closed")
+
+	// The earlier failures are still inside errorWindow, but must not count
+	// towards the new closed state's failure rate.
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_MAX_RETRIES",
+	)
+	expect(protectedFn.getState()).toBe("closed")
+	expect(protectedFn.getFailureRate()).toBeNaN()
+})
+
 it("default fallback rejects with an Error when main rejects with a non-Error", async ({
 	expect,
 }) => {
