@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [10.0.2] - 2026-09-25
+
 ### Chores
 
 - Release automation: `npm version` updates `CHANGELOG.md`, and `npm publish` requires a clean, tagged commit matching the package version before building
@@ -125,7 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
-[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v10.0.1...HEAD
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v10.0.2...HEAD
+[10.0.2]: https://github.com/sirlancelot/breaker-box/compare/v10.0.1...v10.0.2
 [10.0.1]: https://github.com/sirlancelot/breaker-box/compare/v10.0.0...v10.0.1
 [10.0.0]: https://github.com/sirlancelot/breaker-box/compare/v9.0.0...v10.0.0
 [9.0.0]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...v9.0.0

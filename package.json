@@ -1,6 +1,6 @@
 {
 	"name": "breaker-box",
-	"version": "10.0.1",
+	"version": "10.0.2",
 	"description": "A zero-dependency circuit breaker implementation for Node.js",
 	"repository": {
 		"type": "git",
