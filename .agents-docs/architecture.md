@@ -43,6 +43,7 @@ test/
 
 ## Option Constraints (validated in `options.ts`)
 
+- `errorIsTransient`: must be a function; `errorIsFailure` is its deprecated alias (one-time `console.warn` when used)
 - `errorThreshold`: 0–1 inclusive
 - `errorWindow`: minimum 1000ms
 - `resetAfter`: minimum 1000ms
@@ -51,3 +52,4 @@ test/
 - `retryLimit`: minimum 1
 - `retryTest`: must be a function
 - `timeout`: non-negative finite number
+- `fallback`, `onClose`, `onHalfOpen`, `onOpen`: optional, must be functions when provided

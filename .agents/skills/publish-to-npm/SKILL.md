@@ -21,7 +21,7 @@ This project follows a **git-flow** branching model with `develop` for active wo
 
 ## Determining Bump Level
 
-Read `CHANGELOG.md`'s `[Unreleased]` section and apply these rules:
+Read `CHANGELOG.md`'s `## [Unreleased]` section and apply these rules:
 
 - **major** — any `### Removed` items marked BREAKING, or `### Changed` items marked BREAKING
 - **minor** — any `### Added` items (new features) without breaking changes
@@ -34,9 +34,11 @@ Always determine the bump level yourself from the changelog content. Do not ask 
 Before starting a release, verify:
 
 1. All changes for the release are merged to `develop`
-2. CHANGELOG.md `[Unreleased]` section is populated with all changes
+2. Working tree is clean and `develop` is in sync with `origin/develop` (`git fetch && git status -sb`); if local history was rewritten, the user must force-push before continuing
+3. `npm test` passes on `develop` — stop and report failures rather than releasing
+4. CHANGELOG.md `## [Unreleased]` section is populated with all changes
 
-> **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically — no need to run these manually.
+> **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically, but a failure there only surfaces after the release commit and tag are pushed. Check step 3 up front.
 
 ## Release Phases
 
@@ -45,10 +47,9 @@ The release is split into three phases because `npm publish` requires interactiv
 ### Phase 1: Pre-Publish (agent runs)
 
 1. Update CHANGELOG.md:
-   - Move items from `[Unreleased]` into a new version section: `## [X.Y.Z] - YYYY-MM-DD`
-   - Leave an empty `## [Unreleased]` section at the top
-   - Add a comparison link at the bottom: `[X.Y.Z]: https://github.com/sirlancelot/breaker-box/compare/vPREVIOUS...vX.Y.Z`
-   - Update the `[unreleased]` link: `[unreleased]: https://github.com/sirlancelot/breaker-box/compare/vX.Y.Z...HEAD`
+   - Rename `## [Unreleased]` to the new version section: `## [X.Y.Z] - YYYY-MM-DD`. Do **not** leave an `## [Unreleased]` section — the released changelog on `master` must start with the new version
+   - Add a comparison link at the top of the link list: `[X.Y.Z]: https://github.com/sirlancelot/breaker-box/compare/vPREVIOUS...vX.Y.Z`
+   - Remove the `[unreleased]: ...` link if present
    - Commit: `git commit -am "Update changelog for vX.Y.Z"`
 
 2. Merge and version bump:
@@ -60,27 +61,36 @@ The release is split into three phases because `npm publish` requires interactiv
    git push origin master --follow-tags
    ```
 
-3. Tell the user to run `npm publish` in their own terminal and wait for confirmation.
-
 ### Phase 2: Publish (user runs manually)
 
-The user must run this in their own interactive terminal:
+Tell the user to run `npm publish` in their own interactive terminal:
 
 ```bash
 npm publish
 ```
 
-This requires browser-based OTP authentication that the agent terminal cannot handle.
+This requires browser-based OTP authentication that the agent terminal cannot handle. Use the ask user tool with a yes/no prompt to confirm when the publish is complete.
 
 ### Phase 3: Post-Publish (agent runs after user confirms)
 
 ```bash
 git checkout develop
 git merge --no-ff master
-git push origin develop
 ```
+
+Restore the `## [Unreleased]` section on `develop`:
+
+- Add an empty `## [Unreleased]` section above `## [X.Y.Z] - YYYY-MM-DD`
+- Add `[unreleased]: https://github.com/sirlancelot/breaker-box/compare/vX.Y.Z...HEAD` at the top of the link list
+- Amend the merge commit and push:
+
+  ```bash
+  git commit -a --amend --no-edit
+  git push origin develop
+  ```
 
 Then verify:
 
-- `npm info breaker-box version` returns the new version
+- `npm view breaker-box dist-tags --prefer-online --min-release-age=0` shows the new version as `latest`
 - `git log --oneline -5` on develop shows the version bump commit
+- `git show master:CHANGELOG.md` has no `## [Unreleased]` section; `develop`'s `CHANGELOG.md` does
