@@ -16,6 +16,10 @@ lib/
 
 test/
 └── util.ts            # Shared test utilities (useMockConsole)
+
+scripts/
+├── prepublish.mjs     # `npm publish` gate: clean tree tagged v<package.json version>, then builds dist/
+└── version.mjs        # `npm version` hook: finalizes CHANGELOG.md
 ```
 
 ## Key Patterns

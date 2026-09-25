@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Chores
+
+- Release automation: `npm version` updates `CHANGELOG.md`, and `npm publish` requires a clean, tagged commit matching the package version before building
+- Updated development dependencies, including Vitest 5
+
 ## [10.0.1] - 2026-09-25
 
 ### Fixed
@@ -118,6 +125,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Initial release with v5.0.0 API.
 
+[unreleased]: https://github.com/sirlancelot/breaker-box/compare/v10.0.1...HEAD
 [10.0.1]: https://github.com/sirlancelot/breaker-box/compare/v10.0.0...v10.0.1
 [10.0.0]: https://github.com/sirlancelot/breaker-box/compare/v9.0.0...v10.0.0
 [9.0.0]: https://github.com/sirlancelot/breaker-box/compare/v8.1.0...v9.0.0
