@@ -1,5 +1,10 @@
 {
 	"extends": "./tsconfig.json",
-	"compilerOptions": { "allowJs": true, "noEmit": true },
-	"include": [".prettierrc.mjs", "eslint.config.mjs", "vitest.config.ts"]
+	"compilerOptions": { "allowJs": true, "checkJs": true, "noEmit": true },
+	"include": [
+		".prettierrc.mjs",
+		"eslint.config.mjs",
+		"scripts",
+		"vitest.config.ts"
+	]
 }

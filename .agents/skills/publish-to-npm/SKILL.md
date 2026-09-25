@@ -17,7 +17,11 @@ This project follows a **git-flow** branching model with `develop` for active wo
 
 - Follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Tags use `vX.Y.Z` format (e.g., `v7.0.0`)
-- `npm version` creates the version bump commit and annotated git tag
+- `npm version` creates the version bump commit and annotated git tag, running these hooks first:
+  - `preversion` — `npm run test`; a failure aborts before anything changes
+  - `version` — [`scripts/version.mjs`](../../../scripts/version.mjs): renames `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD`, rewrites the `[unreleased]: .../compare/vPREVIOUS...HEAD` link to `[X.Y.Z]: .../compare/vPREVIOUS...vX.Y.Z`, and stages `CHANGELOG.md` into the version commit
+  - `postversion` — `git push --follow-tags` pushes the current branch and the new tag
+- `npm publish` runs `prepublishOnly` — [`scripts/prepublish.mjs`](../../../scripts/prepublish.mjs) aborts unless HEAD is tagged `v<package.json version>` and the working tree has no uncommitted changes, then runs `npm run build`
 
 ## Determining Bump Level
 
@@ -31,14 +35,7 @@ Always determine the bump level yourself from the changelog content. Do not ask 
 
 ## Pre-Release Checklist
 
-Before starting a release, verify:
-
-1. All changes for the release are merged to `develop`
-2. Working tree is clean and `develop` is in sync with `origin/develop` (`git fetch && git status -sb`); if local history was rewritten, the user must force-push before continuing
-3. `npm test` passes on `develop` — stop and report failures rather than releasing
-4. CHANGELOG.md `## [Unreleased]` section is populated with all changes
-
-> **Note:** `npm publish` triggers the `prepublishOnly` hook which runs `npm run test && npm run build` automatically, but a failure there only surfaces after the release commit and tag are pushed. Check step 3 up front.
+Before starting a release, verify working tree is clean and `develop` is in sync with `origin/develop` (`git fetch && git status -sb`). Do not proceed if there are uncommitted changes or unpushed commits.
 
 ## Release Phases
 
@@ -46,20 +43,15 @@ The release is split into three phases because `npm publish` requires interactiv
 
 ### Phase 1: Pre-Publish (agent runs)
 
-1. Update CHANGELOG.md:
-   - Rename `## [Unreleased]` to the new version section: `## [X.Y.Z] - YYYY-MM-DD`. Do **not** leave an `## [Unreleased]` section — the released changelog on `master` must start with the new version
-   - Add a comparison link at the top of the link list: `[X.Y.Z]: https://github.com/sirlancelot/breaker-box/compare/vPREVIOUS...vX.Y.Z`
-   - Remove the `[unreleased]: ...` link if present
-   - Commit: `git commit -am "Update changelog for vX.Y.Z"`
+Merge and version bump:
 
-2. Merge and version bump:
+```bash
+git checkout master
+git merge --no-ff develop
+npm version <major|minor|patch>
+```
 
-   ```bash
-   git checkout master
-   git merge --no-ff develop
-   npm version <major|minor|patch>
-   git push origin master --follow-tags
-   ```
+Afterwards, confirm `git show --stat HEAD` includes `CHANGELOG.md`, `master`'s CHANGELOG.md has no `## [Unreleased]` section, and `git status -sb` shows `master` in sync with `origin/master`.
 
 ### Phase 2: Publish (user runs manually)
 
@@ -69,13 +61,15 @@ Tell the user to run `npm publish` in their own interactive terminal:
 npm publish
 ```
 
-This requires browser-based OTP authentication that the agent terminal cannot handle. Use the ask user tool with a yes/no prompt to confirm when the publish is complete.
+This requires browser-based OTP authentication that the agent terminal cannot handle. Use the ask user tool with a yes/no prompt to confirm when the publish is complete. Do not proceed until the user confirms.
 
-### Phase 3: Post-Publish (agent runs after user confirms)
+### Phase 3: Post-Publish (agent runs)
+
+Back-merge the version bump commit into `develop`:
 
 ```bash
 git checkout develop
-git merge --no-ff master
+git merge --no-ff -Xours master
 ```
 
 Restore the `## [Unreleased]` section on `develop`:
@@ -85,7 +79,8 @@ Restore the `## [Unreleased]` section on `develop`:
 - Amend the merge commit and push:
 
   ```bash
-  git commit -a --amend --no-edit
+  git add CHANGELOG.md
+  git commit --amend --no-edit
   git push origin develop
   ```
 

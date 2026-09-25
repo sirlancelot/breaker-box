@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Chores
+
+- Release automation: `npm version` updates `CHANGELOG.md`, and `npm publish` requires a clean, tagged commit matching the package version before building
+
 ## [10.0.1] - 2026-09-25
 
 ### Fixed
