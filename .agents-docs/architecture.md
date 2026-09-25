@@ -3,6 +3,7 @@
 > Part of [AGENTS.md](../AGENTS.md) — project guidance for AI coding agents.
 
 ```text
+CHANGELOG.md           # Version history, release notes (follows https://keepachangelog.com/)
 README.md              # Installation, Documentation, Examples
 
 lib/
