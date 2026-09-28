@@ -9,6 +9,7 @@ Before editing code or answering questions covered below, you **MUST** read the 
 | Doc                                             | Read before                                                                                                                           |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | [architecture.md](.agents-docs/architecture.md) | Changing `lib/*.ts` source, adding options, or touching circuit states (file structure, FSM states, key patterns, option constraints) |
+| [contributing.md](.agents-docs/contributing.md) | Making any change to the project (changelog entries)                                                                                  |
 | [code-style.md](.agents-docs/code-style.md)     | Writing any code (imports, error messages, assertions, build output)                                                                  |
 | [testing.md](.agents-docs/testing.md)           | Writing or changing `lib/*.test.ts` / `*.test-d.ts` (fake timers, mocking, parameterized tests, snapshots)                            |
 

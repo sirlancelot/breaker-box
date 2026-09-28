@@ -21,6 +21,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		retryTest = () => true,
 		timeout = 0,
 	} = options
+	const { halfOpenProbes = minimumCandidates } = options
 
 	if (
 		"errorIsFailure" in options &&
@@ -61,6 +62,12 @@ export function parseOptions<Fallback extends AnyFn>(
 	assert(
 		minimumCandidates >= 1,
 		`"minimumCandidates" must be greater than 0 (received ${minimumCandidates})`,
+	)
+
+	// halfOpenProbes
+	assert(
+		Number.isInteger(halfOpenProbes) && halfOpenProbes >= 1,
+		`"halfOpenProbes" must be greater than 0 (received ${halfOpenProbes})`,
 	)
 
 	// (optional) onClose
@@ -119,6 +126,7 @@ export function parseOptions<Fallback extends AnyFn>(
 		errorThreshold,
 		errorWindow,
 		fallback,
+		halfOpenProbes,
 		minimumCandidates,
 		onClose,
 		onHalfOpen,

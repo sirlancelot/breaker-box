@@ -27,9 +27,9 @@ This project follows a **git-flow** branching model with `develop` for active wo
 
 Read `CHANGELOG.md`'s `## [Unreleased]` section and apply these rules:
 
-- **major** — any `### Removed` items marked BREAKING, or `### Changed` items marked BREAKING
-- **minor** — any `### Added` items (new features) without breaking changes
-- **patch** — only `### Fixed`, `### Deprecated`, or documentation changes
+- **major** — any item marked BREAKING, in any section
+- **minor** — any `### Added` or `### Deprecated` items, or `### Changed` / `### Removed` items that add to or relax the public API
+- **patch** — only `### Fixed`, `### Security`, or `### Changed` / `### Removed` items with no public API impact
 
 Always determine the bump level yourself from the changelog content. Do not ask the user unless the section is ambiguous or empty.
 

@@ -24,6 +24,7 @@ it("sets defaults", ({ expect }) => {
 			  "errorThreshold": 0,
 			  "errorWindow": 10000,
 			  "fallback": undefined,
+			  "halfOpenProbes": 1,
 			  "minimumCandidates": 1,
 			  "onClose": undefined,
 			  "onHalfOpen": undefined,
@@ -61,13 +62,30 @@ it("handles errorWindow error", ({ expect }) => {
 	)
 })
 
-it("handles minimumCandidates error", ({ expect }) => {
-	expect(() =>
-		parseOptions({ minimumCandidates: 0 }),
-	).toThrowErrorMatchingInlineSnapshot(
-		`[TypeError: "minimumCandidates" must be greater than 0 (received 0)]`,
-	)
+it.for([0, -1, 1.5, NaN])(
+	"handles halfOpenProbes error (%s)",
+	(halfOpenProbes, { expect }) => {
+		expect(() =>
+			parseOptions({ halfOpenProbes }),
+		).toThrowErrorMatchingSnapshot()
+	},
+)
+
+it("defaults halfOpenProbes to minimumCandidates", ({ expect }) => {
+	expect(parseOptions({ minimumCandidates: 3 }).halfOpenProbes).toBe(3)
+	expect(
+		parseOptions({ halfOpenProbes: 2, minimumCandidates: 3 }).halfOpenProbes,
+	).toBe(2)
 })
+
+it.for([0, -1, NaN])(
+	"handles minimumCandidates error (%s)",
+	(minimumCandidates, { expect }) => {
+		expect(() =>
+			parseOptions({ minimumCandidates }),
+		).toThrowErrorMatchingSnapshot()
+	},
+)
 
 it("handles onClose error", ({ expect }) => {
 	expect(() =>

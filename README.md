@@ -186,7 +186,8 @@ Creates a circuit breaker around the provided async function.
   - `errorThreshold`: Failure rate (0-1) that must be exceeded to open the circuit (default: `0`)
   - `errorWindow`: Time window in ms for tracking errors (default: `10_000`)
   - `fallback`: Function to call when an error occurs or circuit is open (default: undefined)
-  - `minimumCandidates`: Minimum settled calls before calculating error rate; also the number of trial calls allowed while half-open, all of which must settle before the circuit closes or reopens (default: `1`)
+  - `halfOpenProbes`: Number of trial calls allowed while half-open; once they have all settled, the circuit closes if their failure rate is at or below `errorThreshold`, otherwise it reopens. Transient errors (see `errorIsTransient`) don't count and free their trial slot (default: `minimumCandidates`)
+  - `minimumCandidates`: Minimum settled calls while closed before calculating error rate; also the default for `halfOpenProbes` (default: `1`)
   - `onClose`: Function called when circuit closes (default: undefined)
   - `onHalfOpen`: Function called when circuit enters half-open state (default: undefined)
   - `onOpen`: Function called when circuit opens (default: undefined)
@@ -200,7 +201,7 @@ Creates a circuit breaker around the provided async function.
 
 A function with the same signature as `fn` and additional methods:
 
-- `.getFailureRate()`: Calculates the failure rate (0-1) of calls settled within the current state's `errorWindow`. Returns `NaN` when fewer than `minimumCandidates` calls have settled, which is always the case while open and immediately after any state transition.
+- `.getFailureRate()`: Calculates the failure rate (0-1) of calls settled within the current state's `errorWindow`. Returns `NaN` if not enough settled calls, or if circuit is open.
 - `.getLatestError()`: Returns the error which triggered the circuit breaker.
 - `.getState()`: Returns current circuit state (`'closed'`, `'open'`, `'halfOpen'`, `'disposed'`).
 - `[Symbol.dispose]()`: Clean up resources and reject future calls. Supports `using` syntax.

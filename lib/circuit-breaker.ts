@@ -81,8 +81,9 @@ function createState(
  * When the failure rate exceeds `errorThreshold` within the `errorWindow`, the
  * circuit opens and rejects calls (using fallback if provided) for `resetAfter`
  * milliseconds. After this period, it transitions to half-open and allows up
- * to `minimumCandidates` concurrent trial calls. If their failure rate stays
- * at or below the threshold, the circuit closes; otherwise it reopens.
+ * to `halfOpenProbes` concurrent trial calls. Once they have all settled, the
+ * circuit closes if their failure rate is at or below the threshold; otherwise
+ * it reopens.
  *
  * @example
  * ```ts
@@ -112,6 +113,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		errorThreshold,
 		errorWindow,
 		fallback,
+		halfOpenProbes,
 		minimumCandidates,
 		onClose,
 		onHalfOpen,
@@ -166,7 +168,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 		}
 	}
 
-	function calculateFailureRate(): number {
+	function calculateFailureRate(threshold: number): number {
 		let failures = 0
 		let total = 0
 		for (const { status } of state.history.values()) {
@@ -174,7 +176,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 			/* v8 ignore else */
 			if (status !== "pending") total++
 		}
-		if (total < minimumCandidates) return NaN
+		if (total < threshold) return NaN
 		return failures / total
 	}
 
@@ -247,7 +249,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					if (guardIsCurrent(current, error)) {
 						lastError = error
 						// Determine if the failure rate should open the circuit.
-						if (calculateFailureRate() > errorThreshold)
+						if (calculateFailureRate(minimumCandidates) > errorThreshold)
 							transitionToOpen(error).catch(noop)
 					}
 				}
@@ -256,7 +258,7 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 			// Half-Open: Execute trial calls until we have enough candidates.
 			else if (
 				current.status === "halfOpen" &&
-				current.history.size < minimumCandidates
+				current.history.size < halfOpenProbes
 			) {
 				try {
 					return await tryCall(current, args)
@@ -265,7 +267,8 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 					break
 				} finally {
 					// Do nothing until we have enough candidates to make a decision.
-					const rate = state === current ? calculateFailureRate() : NaN
+					const rate =
+						state === current ? calculateFailureRate(halfOpenProbes) : NaN
 					if (!Number.isNaN(rate)) {
 						// Determine if the failure rate should re-open the circuit or
 						// if it is healthy enough to close it again.
@@ -315,7 +318,10 @@ export function createCircuitBreaker<Ret, Args extends unknown[]>(
 	const wrapped = protectedFn as CircuitBreakerProtectedFn<Ret, Args>
 	wrapped[Symbol.dispose] = () => dispose()
 	Object.assign(wrapped, { dispose })
-	wrapped.getFailureRate = calculateFailureRate
+	wrapped.getFailureRate = () =>
+		calculateFailureRate(
+			state.status === "halfOpen" ? halfOpenProbes : minimumCandidates,
+		)
 	wrapped.getLatestError = () => state.failureCause
 	wrapped.getState = () => state.status
 

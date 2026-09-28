@@ -1,5 +1,7 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
+exports[`defaults halfOpenProbes to minimumCandidates > console messages 1`] = `[]`;
+
 exports[`handles errorIsFailure error > console messages 1`] = `
 [
   [
@@ -13,7 +15,33 @@ exports[`handles errorThreshold error > console messages 1`] = `[]`;
 
 exports[`handles errorWindow error > console messages 1`] = `[]`;
 
-exports[`handles minimumCandidates error > console messages 1`] = `[]`;
+exports[`handles halfOpenProbes error (-1) > console messages 1`] = `[]`;
+
+exports[`handles halfOpenProbes error (-1) 1`] = `[TypeError: "halfOpenProbes" must be greater than 0 (received -1)]`;
+
+exports[`handles halfOpenProbes error (0) > console messages 1`] = `[]`;
+
+exports[`handles halfOpenProbes error (0) 1`] = `[TypeError: "halfOpenProbes" must be greater than 0 (received 0)]`;
+
+exports[`handles halfOpenProbes error (1.5) > console messages 1`] = `[]`;
+
+exports[`handles halfOpenProbes error (1.5) 1`] = `[TypeError: "halfOpenProbes" must be greater than 0 (received 1.5)]`;
+
+exports[`handles halfOpenProbes error (NaN) > console messages 1`] = `[]`;
+
+exports[`handles halfOpenProbes error (NaN) 1`] = `[TypeError: "halfOpenProbes" must be greater than 0 (received NaN)]`;
+
+exports[`handles minimumCandidates error (-1) > console messages 1`] = `[]`;
+
+exports[`handles minimumCandidates error (-1) 1`] = `[TypeError: "minimumCandidates" must be greater than 0 (received -1)]`;
+
+exports[`handles minimumCandidates error (0) > console messages 1`] = `[]`;
+
+exports[`handles minimumCandidates error (0) 1`] = `[TypeError: "minimumCandidates" must be greater than 0 (received 0)]`;
+
+exports[`handles minimumCandidates error (NaN) > console messages 1`] = `[]`;
+
+exports[`handles minimumCandidates error (NaN) 1`] = `[TypeError: "minimumCandidates" must be greater than 0 (received NaN)]`;
 
 exports[`handles onClose error > console messages 1`] = `[]`;
 
