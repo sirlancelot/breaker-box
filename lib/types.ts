@@ -7,7 +7,7 @@ export type ErrorTest = (error: unknown) => boolean
  *
  * - `closed`: Normal operation, tracking failures
  * - `open`: Failing state, rejecting calls or using fallback
- * - `halfOpen`: Testing recovery with up to `minimumCandidates` trial calls
+ * - `halfOpen`: Testing recovery with up to `halfOpenProbes` trial calls
  * - `disposed`: Terminal state, all calls rejected
  */
 export type StateName = "closed" | "halfOpen" | "open" | "disposed"
@@ -59,10 +59,21 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	fallback?: Fallback
 
 	/**
-	 * The minimum number of settled calls required before calculating the error
-	 * rate and determining whether the circuit breaker should open based on the
-	 * `errorThreshold`. While half-open, this is also the number of trial calls
-	 * allowed, all of which must settle before the circuit closes or reopens.
+	 * The number of trial calls allowed while half-open. Once this many trial
+	 * calls have settled, the circuit closes if their failure rate is at or
+	 * below `errorThreshold`, otherwise it reopens. Errors for which
+	 * `errorIsTransient` returns true don't count as trial outcomes and free
+	 * their trial slot.
+	 *
+	 * @default minimumCandidates
+	 */
+	halfOpenProbes?: number
+
+	/**
+	 * The minimum number of settled calls required while closed before
+	 * calculating the error rate and determining whether the circuit breaker
+	 * should open based on the `errorThreshold`. Also the default for
+	 * `halfOpenProbes`.
 	 *
 	 * @default 1
 	 */
@@ -88,7 +99,7 @@ export interface CircuitBreakerOptions<Fallback extends AnyFn = AnyFn> {
 	/**
 	 * The amount of time in milliseconds for the circuit breaker to remain in its
 	 * "open" state. After this time has passed, the circuit transitions to
-	 * "half-open" and allows up to `minimumCandidates` trial calls to determine
+	 * "half-open" and allows up to `halfOpenProbes` trial calls to determine
 	 * whether to close or to reopen.
 	 *
 	 * @default 30_000 // 30 seconds
@@ -143,9 +154,10 @@ export interface CircuitBreakerProtectedFn<
 
 	/**
 	 * Calculate the failure rate (0-1) of calls settled within the current
-	 * state's error window. Returns `NaN` when fewer than `minimumCandidates`
-	 * calls have settled, which is always the case while open and immediately
-	 * after any state transition.
+	 * state's error window. Returns `NaN` when fewer than the current state's
+	 * sample threshold have settled (`minimumCandidates` while closed,
+	 * `halfOpenProbes` while half-open), which is always the case while open and
+	 * immediately after any state transition.
 	 */
 	getFailureRate(this: void): number
 

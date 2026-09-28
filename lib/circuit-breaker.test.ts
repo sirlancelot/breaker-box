@@ -547,6 +547,147 @@ it("retryDelay as function is called with attempt number", async ({
 	expect(retryDelay).toHaveBeenNthCalledWith(2, 2, expect.any(AbortSignal))
 })
 
+async function createProbeCircuit(
+	options: Parameters<typeof createCircuitBreaker>[1] = {},
+) {
+	when(main).calledWith("bad").thenReject(errorOk)
+	const protectedFn = createCircuitBreaker(main, {
+		errorThreshold: 0.49,
+		halfOpenProbes: 1,
+		minimumCandidates: 10,
+		resetAfter,
+		retryLimit: 1,
+		...options,
+	})
+
+	for (let i = 0; i < 10; i++) {
+		expect(protectedFn.getState()).toBe("closed")
+		await protectedFn("bad").catch(() => undefined)
+	}
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+	main.mockClear()
+
+	return protectedFn
+}
+
+it.for([
+	{
+		name: "without fallback",
+		options: {},
+		rejected: { status: "rejected", reason: errorOk },
+		fallbackCalls: 0,
+	},
+	{
+		name: "with fallback",
+		options: { fallback },
+		rejected: { status: "fulfilled", value: fallbackOk },
+		fallbackCalls: 1,
+	},
+])(
+	"halfOpenProbes admits one trial call and closes on success ($name)",
+	async ({ options, rejected, fallbackCalls }, { expect }) => {
+		when(main)
+			.calledWith("slow")
+			.thenDo(() => delayMs(500).then(() => ok))
+		when(fallback).calledWith("good").thenResolve(fallbackOk)
+		const emitted: string[] = []
+		const onClose = vi.fn(() => emitted.push("close"))
+		const onHalfOpen = vi.fn(() => emitted.push("halfOpen"))
+		using protectedFn = await createProbeCircuit({
+			...options,
+			onClose,
+			onHalfOpen,
+		})
+		fallback.mockClear()
+		await vi.advanceTimersToNextTimerAsync()
+		expect(emitted).toEqual(["halfOpen"])
+
+		const probe = protectedFn("slow")
+		await expect(Promise.allSettled([protectedFn("good")])).resolves.toEqual([
+			rejected,
+		])
+		expect(main).toHaveBeenCalledTimes(1)
+		expect(main).toHaveBeenCalledWith("slow")
+		expect(fallback).toHaveBeenCalledTimes(fallbackCalls)
+		expect(protectedFn.getState()).toBe("halfOpen")
+
+		await vi.advanceTimersByTimeAsync(500)
+		await expect(probe).resolves.toBe(ok)
+		expect(protectedFn.getState()).toBe("closed")
+
+		await vi.advanceTimersToNextTimerAsync()
+		expect(onHalfOpen).toHaveBeenCalledOnce()
+		expect(onClose).toHaveBeenCalledOnce()
+		expect(emitted).toEqual(["halfOpen", "close"])
+	},
+)
+
+it("halfOpenProbes waits for every probe when minimumCandidates is lower", async ({
+	expect,
+}) => {
+	when(main).calledWith("bad").thenReject(errorOk)
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = createCircuitBreaker(main, {
+		halfOpenProbes: 2,
+		minimumCandidates: 1,
+		resetAfter,
+		retryLimit: 1,
+	})
+
+	await expect(protectedFn("bad")).rejects.toThrow()
+	expect(protectedFn.getState()).toBe("open")
+	await vi.advanceTimersByTimeAsync(resetAfter)
+	expect(protectedFn.getState()).toBe("halfOpen")
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("halfOpen")
+	expect(protectedFn.getFailureRate()).toBeNaN()
+
+	await expect(protectedFn("good")).resolves.toBe(ok)
+	expect(protectedFn.getState()).toBe("closed")
+})
+
+it("halfOpenProbes reopens the circuit for resetAfter after one failed probe", async ({
+	expect,
+}) => {
+	when(main).calledWith("good").thenResolve(ok)
+	using protectedFn = await createProbeCircuit()
+
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("open")
+
+	await vi.advanceTimersByTimeAsync(resetAfter - 1)
+	expect(protectedFn.getState()).toBe("open")
+	await expect(protectedFn("good")).rejects.toThrow(errorOk)
+	expect(main).toHaveBeenCalledTimes(1)
+
+	await vi.advanceTimersByTimeAsync(1)
+	expect(protectedFn.getState()).toBe("halfOpen")
+})
+
+it("halfOpenProbes ignores transient probe errors", async ({ expect }) => {
+	const transientError = new DOMException("transient")
+	when(main).calledWith("trial").thenReject(transientError)
+	using protectedFn = await createProbeCircuit({
+		errorIsTransient: (error) => error === transientError,
+	})
+
+	await expect(protectedFn("trial")).rejects.toThrow(transientError)
+	expect(protectedFn.getState()).toBe("halfOpen")
+	expect(protectedFn.getFailureRate()).toBeNaN()
+
+	await expect(protectedFn("bad")).rejects.toThrow(
+		"ERR_CIRCUIT_BREAKER_CALL_FAILURE",
+	)
+	expect(protectedFn.getState()).toBe("open")
+	expect(main).toHaveBeenCalledTimes(2)
+})
+
 it("uses fallback immediately if halfOpen call fails", async ({ expect }) => {
 	when(main).calledWith().thenReject(errorOk)
 	when(fallback).calledWith().thenResolve(fallbackOk)

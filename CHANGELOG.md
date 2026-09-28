@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `halfOpenProbes` option sets how many trial calls are admitted while half-open, independently of `minimumCandidates` (defaults to `minimumCandidates`)
+
 ## [10.0.2] - 2026-09-25
 
 ### Chores

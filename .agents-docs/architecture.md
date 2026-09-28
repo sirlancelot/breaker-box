@@ -29,7 +29,7 @@ scripts/
 - `Symbol.dispose` enables disposal chaining—each wrapper calls `main[Symbol.dispose]?.()` when disposed
 - AbortController/AbortSignal for cleanup coordination and cancellation
 - History tracked via `Map<Promise, HistoryEntry>` with auto-expiring entries after `errorWindow`. Each state gets a fresh history, so calls never count toward a later state
-- `calculateFailureRate()` returns `NaN` when fewer than `minimumCandidates` calls have settled; `NaN` withholds transitions. `.getFailureRate()` is `calculateFailureRate` itself (computed on demand, no stored rate), keeping the happy path free of rate calculations
+- `calculateFailureRate(threshold)` returns `NaN` when fewer than `threshold` calls have settled (callers pass `minimumCandidates` while closed, `halfOpenProbes` while half-open); `NaN` withholds transitions. `.getFailureRate()` wraps it with the current state's threshold (computed on demand, no stored rate), keeping the happy path free of rate calculations
 - Retry and timeout are configured via `createCircuitBreaker` options (`retryLimit`, `retryDelay`, `retryTest`, `timeout`)
 
 ## Circuit Breaker FSM
@@ -43,7 +43,7 @@ scripts/
   - `open` → `halfOpen` (after resetAfter timer) or `disposed`
   - `halfOpen` → `closed` (aggregate failure rate at or below threshold), `open` (aggregate failure rate exceeds threshold), or `disposed`
   - `disposed` → none (terminal state)
-- During `halfOpen`, exactly `minimumCandidates` trial calls must settle within `errorWindow` time in order to decide the next transition.
+- During `halfOpen`, exactly `halfOpenProbes` (default `minimumCandidates`) trial calls must settle within `errorWindow` time in order to decide the next transition.
 - Cleanup coordinated via AbortController—each state transition aborts the previous state's controller
 
 ## Option Constraints (validated in `options.ts`)
@@ -53,6 +53,7 @@ scripts/
 - `errorWindow`: minimum 1000ms
 - `resetAfter`: minimum 1000ms
 - `minimumCandidates`: minimum 1
+- `halfOpenProbes`: minimum 1; defaults to `minimumCandidates`
 - `retryDelay`: non-negative finite number or function
 - `retryLimit`: minimum 1
 - `retryTest`: must be a function
