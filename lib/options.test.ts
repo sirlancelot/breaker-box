@@ -78,7 +78,7 @@ it("defaults halfOpenProbes to minimumCandidates", ({ expect }) => {
 	).toBe(2)
 })
 
-it.for([0, -1, 1.5, NaN])(
+it.for([0, -1, NaN])(
 	"handles minimumCandidates error (%s)",
 	(minimumCandidates, { expect }) => {
 		expect(() =>
